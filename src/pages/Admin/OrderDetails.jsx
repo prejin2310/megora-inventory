@@ -11,6 +11,8 @@ import Button from '../../components/ui/Button'
 
 export default function OrderDetails() {
   const { orderId } = useParams()
+
+  // All hooks at the top (fixed order)
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -22,29 +24,13 @@ export default function OrderDetails() {
   // Estimated delivery (date string: YYYY-MM-DD or ISO)
   const [estimatedDelivery, setEstimatedDelivery] = useState('') // admin sets when In Transit
 
-  const load = async () => {
-    setError('')
-    setLoading(true)
-    try {
-      const o = await getOrder(orderId)
-      setOrder(o)
-      setShip({
-        courier: o?.shipping?.courier || '',
-        awb: o?.shipping?.awb || '',
-        pickupAt: o?.shipping?.pickupAt || '',
-        notes: o?.shipping?.notes || '',
-      })
-      setEstimatedDelivery(o?.estimatedDelivery || '')
-    } catch (e) {
-      console.error('Order load error:', e)
-      setError(e.message || 'Failed to load order')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Derived share link (always declared)
+  const shareLink = useMemo(() => {
+    const pub = order?.publicId || orderId
+    return `${location.origin}/o/${pub}`
+  }, [order?.publicId, orderId])
 
-  useEffect(() => { load() }, [orderId])
-
+  // Flow helper (always declared)
   const canAdvance = useMemo(() => {
     const flow = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Delivered']
     const idx = flow.indexOf(order?.status || '')
@@ -52,11 +38,39 @@ export default function OrderDetails() {
     return { flow, idx, next }
   }, [order])
 
+  // Load order (effect always declared)
+  useEffect(() => {
+    const load = async () => {
+      setError('')
+      setLoading(true)
+      try {
+        const o = await getOrder(orderId)
+        setOrder(o)
+        setShip({
+          courier: o?.shipping?.courier || '',
+          awb: o?.shipping?.awb || '',
+          pickupAt: o?.shipping?.pickupAt || '',
+          notes: o?.shipping?.notes || '',
+        })
+        setEstimatedDelivery(o?.estimatedDelivery || '')
+      } catch (e) {
+        console.error('Order load error:', e)
+        setError(e.message || 'Failed to load order')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [orderId])
+
+  // Actions
   const move = async (next) => {
     setError('')
     try {
       await updateOrderStatus(orderId, next, `Moved to ${next}`)
-      await load()
+      // reload
+      const o = await getOrder(orderId)
+      setOrder(o)
     } catch (e) {
       console.error('Update status error:', e)
       setError(e.message || 'Failed to update status')
@@ -68,7 +82,8 @@ export default function OrderDetails() {
     setError('')
     try {
       await updateOrderShipping(orderId, ship)
-      await load()
+      const o = await getOrder(orderId)
+      setOrder(o)
     } catch (e) {
       console.error('Update shipping error:', e)
       setError(e.message || 'Failed to save shipping')
@@ -80,17 +95,23 @@ export default function OrderDetails() {
   const saveEstimated = async () => {
     setError('')
     try {
-      // Accept YYYY-MM-DD or ISO strings; store as provided string
       await updateOrderEstimated(orderId, estimatedDelivery || '')
-      await load()
+      const o = await getOrder(orderId)
+      setOrder(o)
     } catch (e) {
       console.error('Estimated delivery update error:', e)
       setError(e.message || 'Failed to update estimated delivery')
     }
   }
 
-  if (loading) return <div>Loading…</div>
-  if (!order) return <div className="error">Order not found</div>
+  const copyShare = async () => {
+    try {
+      await navigator.clipboard.writeText(shareLink)
+      alert(`Copied link:\n${shareLink}`)
+    } catch {
+      prompt('Copy link:', shareLink)
+    }
+  }
 
   const fmtDateTime = (ts) => {
     try {
@@ -101,6 +122,10 @@ export default function OrderDetails() {
     }
   }
 
+  // Early returns come AFTER all hooks
+  if (loading) return <div>Loading…</div>
+  if (!order) return <div className="error">Order not found</div>
+
   return (
     <div className="vstack gap">
       <div className="hstack">
@@ -110,6 +135,20 @@ export default function OrderDetails() {
       </div>
 
       {error && <div className="error">{error}</div>}
+
+      {/* Customer share link */}
+      <div className="card vstack gap">
+        <h3>Customer Share Link</h3>
+        <div className="hstack" style={{ gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input
+            className="share-input"
+            value={shareLink}
+            readOnly
+            onFocus={e => e.currentTarget.select()}
+          />
+          <Button size="sm" onClick={copyShare}>Copy link</Button>
+        </div>
+      </div>
 
       {/* Status actions */}
       <div className="card vstack gap">
@@ -125,7 +164,7 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Estimated Delivery (admin sets when in transit or later) */}
+      {/* Estimated Delivery */}
       <div className="card vstack gap">
         <h3>Estimated Delivery</h3>
         <div className="grid two">
@@ -177,19 +216,38 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Items (read-only here; edit in creation modal if needed) */}
+      {/* Items with product images */}
       <div className="card vstack gap">
         <h3>Items</h3>
         <div className="grid two">
           {(order.items || []).map((it, i) => (
             <div key={`${it.sku}-${i}`} className="card">
-              <div className="hstack">
-                <div>{it.name} × {Number(it.qty)}</div>
-                <div className="grow" />
-                <div>₹{Number(it.price).toFixed(2)}</div>
-              </div>
-              <div className="muted small">
-                SKU: {it.sku}{it.updatedAt ? ` • updated: ${it.updatedAt}` : ''}
+              <div className="hstack" style={{ gap: 10, alignItems: 'center' }}>
+                <div className="thumb">
+                  {(() => {
+                    const img = (it.image || '').trim()
+                    return img ? (
+                      <img
+                        src={img}
+                        alt={it.name || it.sku || 'Item'}
+                        referrerPolicy="no-referrer"
+                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '' }}
+                      />
+                    ) : (
+                      <div className="ph">IMG</div>
+                    )
+                  })()}
+                </div>
+                <div className="grow">
+                  <div className="hstack" style={{ gap: 8 }}>
+                    <div>{it.name} × {Number(it.qty)}</div>
+                    <div className="grow" />
+                    <div>₹{Number(it.price).toFixed(2)}</div>
+                  </div>
+                  <div className="muted small">
+                    SKU: {it.sku}{it.updatedAt ? ` • updated: ${it.updatedAt}` : ''}
+                  </div>
+                </div>
               </div>
             </div>
           ))}
@@ -217,6 +275,35 @@ export default function OrderDetails() {
           ))}
         </div>
       </div>
+
+      <style>{`
+        .gap { gap: 12px; }
+        .vstack { display: grid; }
+        .hstack { display: flex; align-items: center; }
+        .grid.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 720px) { .grid.two { grid-template-columns: 1fr; } }
+        .grow { flex: 1; }
+        .pill { background: #eef2ff; color: #3730a3; border-radius: 999px; padding: 4px 10px; font-weight: 700; }
+
+        .card { border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 12px; }
+        .muted { color: #6b7280; }
+        .small { font-size: 12px; }
+
+        .share-input {
+          width: min(420px, 56vw);
+          padding: 8px 10px;
+          border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;
+          background: #f8fafc;
+        }
+
+        .thumb { width: 56px; height: 56px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fafafa; display: grid; place-items: center; color: #9ca3af; font-size: 12px; }
+        .thumb img { width: 100%; height: 100%; object-fit: cover; }
+        .ph { display: grid; place-items: center; width: 100%; height: 100%; }
+
+        .timeline { display: grid; gap: 10px; }
+        .timeline-item { display: grid; grid-template-columns: 14px 1fr; gap: 10px; }
+        .timeline-dot { width: 10px; height: 10px; border-radius: 999px; background: #0ea5e9; margin-top: 6px; }
+      `}</style>
     </div>
   )
 }
