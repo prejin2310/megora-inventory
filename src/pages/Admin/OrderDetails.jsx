@@ -12,25 +12,30 @@ import Button from '../../components/ui/Button'
 export default function OrderDetails() {
   const { orderId } = useParams()
 
-  // All hooks at the top (fixed order)
+  // Keep hooks order stable
   const [order, setOrder] = useState(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // Shipping editable fields
+  // Shipping
   const [ship, setShip] = useState({ courier: '', awb: '', pickupAt: '', notes: '' })
   const [savingShip, setSavingShip] = useState(false)
 
-  // Estimated delivery (date string: YYYY-MM-DD or ISO)
-  const [estimatedDelivery, setEstimatedDelivery] = useState('') // admin sets when In Transit
+  // Estimated delivery
+  const [estimatedDelivery, setEstimatedDelivery] = useState('')
 
-  // Derived share link (always declared)
+  // Reason modal for Cancelled / Returned
+  const [reasonOpen, setReasonOpen] = useState(false)
+  const [reasonText, setReasonText] = useState('')
+  const [pendingStatus, setPendingStatus] = useState('') // 'Cancelled' | 'Returned'
+
+  // Share link (customer)
   const shareLink = useMemo(() => {
     const pub = order?.publicId || orderId
     return `${location.origin}/o/${pub}`
   }, [order?.publicId, orderId])
 
-  // Flow helper (always declared)
+  // Flow helper
   const canAdvance = useMemo(() => {
     const flow = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Delivered']
     const idx = flow.indexOf(order?.status || '')
@@ -38,7 +43,6 @@ export default function OrderDetails() {
     return { flow, idx, next }
   }, [order])
 
-  // Load order (effect always declared)
   useEffect(() => {
     const load = async () => {
       setError('')
@@ -63,18 +67,50 @@ export default function OrderDetails() {
     load()
   }, [orderId])
 
-  // Actions
+  const reload = async () => {
+    const o = await getOrder(orderId)
+    setOrder(o)
+  }
+
   const move = async (next) => {
     setError('')
     try {
       await updateOrderStatus(orderId, next, `Moved to ${next}`)
-      // reload
-      const o = await getOrder(orderId)
-      setOrder(o)
+      await reload()
     } catch (e) {
       console.error('Update status error:', e)
       setError(e.message || 'Failed to update status')
     }
+  }
+
+  // Ask reason for Cancelled/Returned
+  const askReasonAndMove = (next) => {
+    setPendingStatus(next)
+    setReasonText('')
+    setReasonOpen(true)
+  }
+
+  const confirmReasonMove = async () => {
+    if (!reasonText.trim()) {
+      return alert('Please provide a reason (notes).')
+    }
+    setError('')
+    try {
+      await updateOrderStatus(orderId, pendingStatus, reasonText.trim())
+      setReasonOpen(false)
+      setPendingStatus('')
+      setReasonText('')
+      await reload()
+    } catch (e) {
+      console.error('Update status error:', e)
+      setError(e.message || 'Failed to update status')
+    }
+  }
+
+  const cancelReasonMove = () => {
+    setReasonOpen(false)
+    setPendingStatus('')
+    setReasonText('')
   }
 
   const saveShipping = async () => {
@@ -82,8 +118,7 @@ export default function OrderDetails() {
     setError('')
     try {
       await updateOrderShipping(orderId, ship)
-      const o = await getOrder(orderId)
-      setOrder(o)
+      await reload()
     } catch (e) {
       console.error('Update shipping error:', e)
       setError(e.message || 'Failed to save shipping')
@@ -96,8 +131,7 @@ export default function OrderDetails() {
     setError('')
     try {
       await updateOrderEstimated(orderId, estimatedDelivery || '')
-      const o = await getOrder(orderId)
-      setOrder(o)
+      await reload()
     } catch (e) {
       console.error('Estimated delivery update error:', e)
       setError(e.message || 'Failed to update estimated delivery')
@@ -122,12 +156,12 @@ export default function OrderDetails() {
     }
   }
 
-  // Early returns come AFTER all hooks
   if (loading) return <div>Loading…</div>
   if (!order) return <div className="error">Order not found</div>
 
   return (
     <div className="vstack gap">
+      {/* Header */}
       <div className="hstack">
         <h2>Order #{order.publicId || order.id}</h2>
         <div className="grow" />
@@ -150,7 +184,7 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Status actions */}
+      {/* Status actions including Cancel/Return with mandatory reason */}
       <div className="card vstack gap">
         <h3>Status</h3>
         <div className="hstack" style={{ gap: 8, flexWrap: 'wrap' }}>
@@ -158,6 +192,24 @@ export default function OrderDetails() {
           {canAdvance.next('Waiting for Pickup') && <Button onClick={() => move('Waiting for Pickup')}>Waiting for Pickup</Button>}
           {canAdvance.next('In Transit') && <Button onClick={() => move('In Transit')}>Mark In Transit</Button>}
           {canAdvance.next('Delivered') && <Button onClick={() => move('Delivered')}>Mark Delivered</Button>}
+
+          {/* New buttons with distinct colors */}
+          <button
+            type="button"
+            className="btn-danger"
+            onClick={() => askReasonAndMove('Cancelled')}
+            title="Cancel this order (requires reason)"
+          >
+            Cancel Order
+          </button>
+          <button
+            type="button"
+            className="btn-warning"
+            onClick={() => askReasonAndMove('Returned')}
+            title="Mark this order as Returned (requires reason)"
+          >
+            Mark Returned
+          </button>
         </div>
         <div className="muted">
           Flow: Received → Packed → Waiting for Pickup → In Transit → Delivered
@@ -182,7 +234,7 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Shipping editor */}
+      {/* Shipping */}
       <div className="card vstack gap">
         <h3>Shipping</h3>
         <div className="grid two">
@@ -216,7 +268,7 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Items with product images */}
+      {/* Items with robust product image rendering */}
       <div className="card vstack gap">
         <h3>Items</h3>
         <div className="grid two">
@@ -231,7 +283,10 @@ export default function OrderDetails() {
                         src={img}
                         alt={it.name || it.sku || 'Item'}
                         referrerPolicy="no-referrer"
-                        onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = '' }}
+                        onError={(e) => {
+                          e.currentTarget.onerror = null
+                          e.currentTarget.src = '' // fallback to show placeholder
+                        }}
                       />
                     ) : (
                       <div className="ph">IMG</div>
@@ -260,21 +315,58 @@ export default function OrderDetails() {
       </div>
 
       {/* History */}
-      <div className="card vstack gap">
-        <h3>History</h3>
-        <div className="timeline">
-          {(order.history || []).map((h, i) => (
-            <div key={i} className="timeline-item">
-              <div className="timeline-dot" />
-              <div className="timeline-body">
-                <div><strong>{h.status}</strong></div>
-                <div className="muted small">{fmtDateTime(h.at)}</div>
-                {h.note && <div className="muted">{h.note}</div>}
-              </div>
+<div className="card vstack gap">
+  <h3>History</h3>
+  <div className="timeline">
+    {(order.history || []).map((h, i) => (
+      <div key={i} className="timeline-item">
+        <div className="timeline-axis">
+          <div className="timeline-dot" />
+        </div>
+        <div className="timeline-content">
+          <div className="timeline-row">
+            <div className="tl-status"><strong>{h.status}</strong></div>
+            <div className="tl-time muted small">{fmtDateTime(h.at)}</div>
+          </div>
+          {h.note && (
+            <div className="tl-note">
+              {h.note}
             </div>
-          ))}
+          )}
         </div>
       </div>
+    ))}
+  </div>
+</div>
+
+      {/* Reason modal (mandatory) */}
+      {reasonOpen && (
+        <div className="modal-backdrop" role="dialog" aria-modal="true">
+          <div className="modal">
+            <div className="modal-head">
+              <div className="modal-title">Reason required — {pendingStatus}</div>
+            </div>
+            <div className="modal-body">
+              <textarea
+                rows={4}
+                placeholder={`Add a reason for marking as ${pendingStatus} (required)`}
+                value={reasonText}
+                onChange={e => setReasonText(e.target.value)}
+              />
+            </div>
+            <div className="modal-foot">
+              <Button variant="ghost" onClick={cancelReasonMove}>Cancel</Button>
+              <button
+                type="button"
+                className={pendingStatus === 'Cancelled' ? 'btn-danger' : 'btn-warning'}
+                onClick={confirmReasonMove}
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         .gap { gap: 12px; }
@@ -296,13 +388,112 @@ export default function OrderDetails() {
           background: #f8fafc;
         }
 
-        .thumb { width: 56px; height: 56px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fafafa; display: grid; place-items: center; color: #9ca3af; font-size: 12px; }
+        .thumb { width: 64px; height: 64px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fafafa; display: grid; place-items: center; color: #9ca3af; font-size: 12px; }
         .thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .ph { display: grid; place-items: center; width: 100%; height: 100%; }
 
-        .timeline { display: grid; gap: 10px; }
-        .timeline-item { display: grid; grid-template-columns: 14px 1fr; gap: 10px; }
-        .timeline-dot { width: 10px; height: 10px; border-radius: 999px; background: #0ea5e9; margin-top: 6px; }
+        .timeline { display: grid; gap: 12px; }
+
+  /* Two columns: 20px axis + flexible content area */
+  .timeline-item {
+    display: grid;
+    grid-template-columns: 20px 1fr;
+    gap: 12px;
+    align-items: start;
+    position: relative;
+  }
+
+  /* Left axis: dot + continuation line */
+  .timeline-axis {
+    position: relative;
+    width: 20px;
+    display: grid;
+    place-items: center;
+  }
+  .timeline-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    background: #0ea5e9;
+    z-index: 1;
+  }
+  .timeline-axis::after {
+    content: '';
+    position: absolute;
+    top: 14px; /* start just below the dot */
+    left: 50%;
+    transform: translateX(-50%);
+    width: 2px;
+    height: calc(100% - 14px);
+    background: #e5e7eb;
+  }
+  .timeline-item:last-child .timeline-axis::after {
+    display: none; /* no trailing line on last item */
+  }
+
+  /* Right content: allow wrapping and full-width usage */
+  .timeline-content {
+    min-width: 0; /* enables proper wrapping in grids */
+    display: grid;
+    gap: 6px;
+  }
+
+  /* First row: status on left, time on right */
+  .timeline-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 10px;
+    align-items: baseline;
+  }
+  .tl-status { overflow-wrap: anywhere; }
+  .tl-time { white-space: nowrap; }
+
+  /* Note block fills width and wraps long words/links */
+  .tl-note {
+    color: #374151;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  /* Optional: add subtle background for readability
+  .tl-note { background: #f9fafb; padding: 6px 8px; border-radius: 8px; }
+  */
+
+  /* Responsive: stack time under status on small screens */
+  @media (max-width: 560px) {
+    .timeline-row { grid-template-columns: 1fr; }
+    .tl-time { margin-top: -2px; }
+  }
+
+        /* New button styles for Cancel / Returned */
+        .btn-danger {
+          border: 1px solid #ef4444; background: #fee2e2; color: #991b1b;
+          border-radius: 10px; padding: 8px 12px; font-weight: 700; cursor: pointer;
+        }
+        .btn-danger:hover { background: #fecaca; }
+
+        .btn-warning {
+          border: 1px solid #f59e0b; background: #fffbeb; color: #92400e;
+          border-radius: 10px; padding: 8px 12px; font-weight: 700; cursor: pointer;
+        }
+        .btn-warning:hover { background: #fef3c7; }
+
+        /* Modal */
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
+        .modal {
+          width: min(560px, 96vw);
+          background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+          box-shadow: 0 24px 64px rgba(0,0,0,.18); display: grid; grid-template-rows: auto 1fr auto;
+          max-height: 80vh; overflow: hidden;
+        }
+        .modal-head { padding: 10px 12px; border-bottom: 1px solid #eef0f2; }
+        .modal-title { font-weight: 800; }
+        .modal-body { padding: 12px; }
+        .modal-body textarea {
+          width: 100%; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none;
+        }
+        .modal-body textarea:focus { border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
+        .modal-foot { padding: 10px 12px; border-top: 1px solid #eef0f2; display: flex; justify-content: flex-end; gap: 8px; }
       `}</style>
     </div>
   )
