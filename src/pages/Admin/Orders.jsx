@@ -5,6 +5,7 @@ import Button from '../../components/ui/Button'
 import OrderForm from '../../components/orders/OrderForm'
 import Table from '../../components/ui/Table'
 import { useNavigate } from 'react-router-dom'
+import { resolveCustomerNames } from '../../firebase/firestore'
 
 export default function Orders() {
   const [orders, setOrders] = useState([])
@@ -17,12 +18,15 @@ export default function Orders() {
     setError('')
     try {
       const snap = await getDocs(collection(db, 'orders'))
-      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+      const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      const withNames = await resolveCustomerNames(raw)
+      setOrders(withNames)
     } catch (e) {
       console.error('Orders load error:', e)
       setError(e.message || 'Failed to load orders')
     }
   }
+
   useEffect(() => { refresh() }, [])
 
   const filtered = useMemo(() => {
@@ -65,36 +69,36 @@ export default function Orders() {
       )}
 
       <Table
-  columns={['Public ID', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']}
-  rows={filtered.map(o => {
-    const pub = o.publicId || o.id
-    const link = `${location.origin}/o/${pub}`
-    return [
-      pub,
-      o.status,
-      o.customer?.name || o.customerId || '-',
-      `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
-      o.channel,
-      <button
-        key={`copy-${o.id}`}
-        className="btn btn-sm"
-        type="button"
-        onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(link)
-            alert(`Copied link:\n${link}`)
-          } catch {
-            prompt('Copy link:', link)
-          }
-        }}
-      >
-        Copy link
-      </button>,
-      <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
-    ]
-  })}
-/>
-
+        columns={['Public ID', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']}
+        rows={filtered.map(o => {
+          const pub = o.publicId || o.id
+          const link = `${location.origin}/o/${pub}`
+          const displayName = o._customerName || o.customerId?.slice(0, 12) || '-'
+          return [
+            pub,
+            o.status,
+            displayName,
+            `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
+            o.channel || '-',
+            <button
+              key={`copy-${o.id}`}
+              className="btn btn-sm"
+              type="button"
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(link)
+                  alert(`Copied link:\n${link}`)
+                } catch {
+                  prompt('Copy link:', link)
+                }
+              }}
+            >
+              Copy link
+            </button>,
+            <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
+          ]
+        })}
+      />
     </div>
   )
 }

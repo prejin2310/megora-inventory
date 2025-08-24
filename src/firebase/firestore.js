@@ -1,4 +1,3 @@
-// src/firebase/firestore.js
 import {
   collection,
   doc,
@@ -18,11 +17,12 @@ import { db } from './firebase'
 
 const nowISO = () => new Date().toISOString()
 
-// ---------- Customers ----------
+// -------- Customers --------
 export async function listCustomers() {
   const snap = await getDocs(collection(db, 'customers'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
+
 export async function createCustomer(data) {
   const payload = {
     name: String(data?.name || ''),
@@ -34,6 +34,7 @@ export async function createCustomer(data) {
   }
   return addDoc(collection(db, 'customers'), payload)
 }
+
 export async function updateCustomer(id, data) {
   const ref = doc(db, 'customers', id)
   const payload = {
@@ -45,10 +46,12 @@ export async function updateCustomer(id, data) {
   }
   return updateDoc(ref, payload)
 }
+
 export async function deleteCustomer(id) {
   const ref = doc(db, 'customers', id)
   return deleteDoc(ref)
 }
+
 export async function getCustomer(id) {
   const ref = doc(db, 'customers', id)
   const snap = await getDoc(ref)
@@ -56,11 +59,37 @@ export async function getCustomer(id) {
   return { id: snap.id, ...snap.data() }
 }
 
-// ---------- Products ----------
+// Utility to resolve many customer names by ID
+export async function getCustomerName(customerId) {
+  if (!customerId) return null
+  const c = await getCustomer(customerId)
+  return c?.name || null
+}
+
+export async function resolveCustomerNames(orders) {
+  // Collect unique IDs
+  const ids = Array.from(
+    new Set(orders.map(o => o.customerId).filter(Boolean))
+  )
+  const cache = {}
+  // Batch-like sequential fetch to keep it simple
+  for (const id of ids) {
+    const c = await getCustomer(id)
+    cache[id] = c?.name || null
+  }
+  // Map onto orders
+  return orders.map(o => ({
+    ...o,
+    _customerName: o.customer?.name || (o.customerId ? (cache[o.customerId] || null) : null),
+  }))
+}
+
+// -------- Products --------
 export async function listProducts() {
   const snap = await getDocs(collection(db, 'products'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
+
 export async function createProduct(data) {
   const payload = {
     sku: String(data?.sku || ''),
@@ -73,6 +102,7 @@ export async function createProduct(data) {
   }
   return addDoc(collection(db, 'products'), payload)
 }
+
 export async function updateProduct(id, data) {
   const ref = doc(db, 'products', id)
   const payload = {
@@ -85,10 +115,12 @@ export async function updateProduct(id, data) {
   }
   return updateDoc(ref, payload)
 }
+
 export async function deleteProduct(id) {
   const ref = doc(db, 'products', id)
   return deleteDoc(ref)
 }
+
 export async function getProduct(id) {
   const ref = doc(db, 'products', id)
   const snap = await getDoc(ref)
@@ -96,18 +128,19 @@ export async function getProduct(id) {
   return { id: snap.id, ...snap.data() }
 }
 
-// ---------- Orders ----------
+// -------- Orders --------
 export async function listOrders() {
   const snap = await getDocs(collection(db, 'orders'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
+
 export async function getOrder(orderId) {
   const ref = doc(db, 'orders', orderId)
   const snap = await getDoc(ref)
   if (!snap.exists()) return null
   return { id: snap.id, ...snap.data() }
 }
-// NEW: public lookup by publicId
+
 export async function getOrderByPublicId(publicId) {
   const q = query(collection(db, 'orders'), where('publicId', '==', String(publicId)), limit(1))
   const snap = await getDocs(q)
@@ -115,7 +148,9 @@ export async function getOrderByPublicId(publicId) {
   const d = snap.docs[0]
   return { id: d.id, ...d.data() }
 }
-// Create order safely (no serverTimestamp inside arrays)
+
+// Create order: no shipping details at creation.
+// Items array must NOT use serverTimestamp inside elements.
 export async function createOrder(data) {
   const items = Array.isArray(data?.items) ? data.items : []
   const cleanItems = items.map(it => ({
@@ -123,43 +158,44 @@ export async function createOrder(data) {
     name: String(it.name || ''),
     price: Number(it.price || 0),
     qty: Number(it.qty || 1),
-    updatedAt: it.updatedAt || nowISO(), // client timestamp in array
+    updatedAt: it.updatedAt || nowISO(), // client time inside array
   }))
+
+  // Compute totals (no tax at item entry UI per request)
   const subtotal =
     data?.totals?.subtotal != null
       ? Number(data.totals.subtotal)
       : cleanItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
+
   const totals = {
     subtotal,
-    tax: Number(data?.totals?.tax || 0),
+    tax: 0, // removed from item input; can be adjusted later in order details if needed
     shipping: Number(data?.totals?.shipping || 0),
     discount: Number(data?.totals?.discount || 0),
   }
-  totals.grandTotal = totals.subtotal + totals.tax + totals.shipping - totals.discount
+  totals.grandTotal = totals.subtotal + totals.shipping - totals.discount
 
-  const ref = doc(collection(db, 'orders'))
+  const docRef = doc(collection(db, 'orders'))
   const publicId = data?.publicId || `MGO-${Date.now().toString().slice(-6)}`
-  await setDoc(ref, {
+
+  await setDoc(docRef, {
     customerId: data?.customerId || null,
-    customer: data?.customer || null,
+    customer: data?.customer || null, // embedded snapshot for quick display (optional)
     items: cleanItems,
     totals,
     channel: data?.channel || 'Manual',
     notes: data?.notes || '',
     status: data?.status || 'Received',
     publicId,
+    // shipping is intentionally omitted at creation time
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    history: Array.isArray(data?.history)
-      ? data.history.map(h => ({
-          status: String(h.status || 'Received'),
-          at: h.at || nowISO(),
-          note: h.note || '',
-        }))
-      : [{ status: 'Received', at: nowISO(), note: 'Order created' }],
+    history: [{ status: 'Received', at: nowISO(), note: 'Order created' }],
   })
-  return { id: ref.id, publicId }
+
+  return { id: docRef.id, publicId }
 }
+
 export async function updateOrderStatus(orderId, nextStatus, note = '') {
   const ref = doc(db, 'orders', orderId)
   await updateDoc(ref, {
@@ -168,6 +204,8 @@ export async function updateOrderStatus(orderId, nextStatus, note = '') {
     history: arrayUnion({ status: nextStatus, at: nowISO(), note }),
   })
 }
+
+// Update items safely later (still no serverTimestamp inside array elems)
 export async function updateOrderItems(orderId, items) {
   const cleanItems = (Array.isArray(items) ? items : []).map(it => ({
     sku: String(it.sku || ''),
@@ -178,4 +216,18 @@ export async function updateOrderItems(orderId, items) {
   }))
   const ref = doc(db, 'orders', orderId)
   await updateDoc(ref, { items: cleanItems, updatedAt: serverTimestamp() })
+}
+
+// Update shipping details later (edit from Order Details page)
+export async function updateOrderShipping(orderId, shipping) {
+  const ref = doc(db, 'orders', orderId)
+  await updateDoc(ref, {
+    shipping: {
+      courier: String(shipping?.courier || ''),
+      awb: String(shipping?.awb || ''),
+      pickupAt: String(shipping?.pickupAt || ''), // ISO optional
+      notes: String(shipping?.notes || ''),
+    },
+    updatedAt: serverTimestamp(),
+  })
 }
