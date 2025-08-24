@@ -1,5 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { listProducts, listCustomers, createCustomer, createOrder } from '../../firebase/firestore'
+import {
+  listProducts,
+  listCustomers,
+  createCustomer,
+  createOrder,
+} from '../../firebase/firestore'
 import Button from '../ui/Button'
 
 export default function OrderForm({ onClose, onCreated }) {
@@ -7,12 +12,15 @@ export default function OrderForm({ onClose, onCreated }) {
   const [customers, setCustomers] = useState([])
   const [customerId, setCustomerId] = useState('')
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '' })
-  const [items, setItems] = useState([])
+
   const [search, setSearch] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
   const [qty, setQty] = useState(1)
+  const [items, setItems] = useState([])
+
   const [channel, setChannel] = useState('Manual')
   const [notes, setNotes] = useState('')
+
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -29,13 +37,29 @@ export default function OrderForm({ onClose, onCreated }) {
     })()
   }, [])
 
+  // Robust client-side search by name, SKU, or category (case-insensitive, trimmed)
   const filteredProducts = useMemo(() => {
-    const q = search.trim().toLowerCase()
+    const q = (search || '').trim().toLowerCase()
     if (!q) return products
-    return products.filter(p =>
-      [p.name, p.sku, p.category].some(v => String(v || '').toLowerCase().includes(q))
-    )
+    return products.filter((p) => {
+      const sku = String(p.sku || '').toLowerCase()
+      const name = String(p.name || '').toLowerCase()
+      const category = String(p.category || '').toLowerCase()
+      return sku.includes(q) || name.includes(q) || category.includes(q)
+    })
   }, [products, search])
+
+  // Reset selection when search text changes (prevents stale selection)
+  useEffect(() => {
+    setSelectedProductId('')
+  }, [search])
+
+  // Auto-select first filtered product when list updates and nothing is selected
+  useEffect(() => {
+    if (!selectedProductId && filteredProducts.length) {
+      setSelectedProductId(filteredProducts[0].id)
+    }
+  }, [filteredProducts, selectedProductId])
 
   const addItem = () => {
     const p = filteredProducts.find(x => x.id === selectedProductId)
@@ -51,12 +75,14 @@ export default function OrderForm({ onClose, onCreated }) {
       return [...prev, { sku: p.sku, name: p.name, price: Number(p.price || 0), qty: qn }]
     })
     setQty(1)
+    setSelectedProductId('') // clear after add
   }
 
   const removeItem = (sku) => setItems(prev => prev.filter(x => x.sku !== sku))
 
   const subtotal = items.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
-  const totals = { subtotal, shipping: 0, discount: 0, grandTotal: subtotal } // tax removed at creation
+  // No tax at creation. Shipping/discount default 0; editable later in Order Details if needed.
+  const totals = { subtotal, shipping: 0, discount: 0, grandTotal: subtotal }
 
   const save = async () => {
     setError('')
@@ -68,10 +94,21 @@ export default function OrderForm({ onClose, onCreated }) {
     try {
       let finalCustomerId = customerId
       let customerSnap = null
+
+      // Create a new customer only if not selecting existing and name is provided
       if (!finalCustomerId && newCustomer.name.trim()) {
-        const ref = await createCustomer(newCustomer)
+        const ref = await createCustomer({
+          name: newCustomer.name.trim(),
+          email: newCustomer.email.trim(),
+          phone: newCustomer.phone.trim(),
+          address: newCustomer.address.trim(),
+        })
         finalCustomerId = ref.id
-        customerSnap = { name: newCustomer.name, email: newCustomer.email, phone: newCustomer.phone }
+        customerSnap = {
+          name: newCustomer.name.trim(),
+          email: newCustomer.email.trim(),
+          phone: newCustomer.phone.trim(),
+        }
       } else if (finalCustomerId) {
         const c = customers.find(c => c.id === finalCustomerId)
         if (c) customerSnap = { name: c.name, email: c.email, phone: c.phone }
@@ -79,13 +116,14 @@ export default function OrderForm({ onClose, onCreated }) {
 
       const payload = {
         customerId: finalCustomerId || null,
-        customer: customerSnap || null,
+        customer: customerSnap || null, // embedded snapshot for quick display in lists
         items,
         totals,
         channel,
         notes,
         // shipping intentionally omitted at creation
       }
+
       const { id } = await createOrder(payload)
       onCreated?.({ id })
     } catch (e) {
@@ -103,15 +141,19 @@ export default function OrderForm({ onClose, onCreated }) {
           <h3>Create Order</h3>
           <button className="btn btn-ghost" onClick={onClose}>×</button>
         </div>
+
         <div className="modal-body">
           {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
 
           <div className="grid two">
+            {/* Customer */}
             <div className="card vstack gap">
               <h4>Customer</h4>
               <select value={customerId} onChange={e => setCustomerId(e.target.value)}>
                 <option value="">Select existing</option>
-                {customers.map(c => <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>)}
+                {customers.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} — {c.phone}</option>
+                ))}
               </select>
               <div className="muted">Or add new customer</div>
               <input placeholder="Name" value={newCustomer.name} onChange={e => setNewCustomer(s => ({ ...s, name: e.target.value }))} />
@@ -120,21 +162,40 @@ export default function OrderForm({ onClose, onCreated }) {
               <textarea placeholder="Address" value={newCustomer.address} onChange={e => setNewCustomer(s => ({ ...s, address: e.target.value }))} />
             </div>
 
+            {/* Items */}
             <div className="card vstack gap">
               <h4>Items</h4>
-              <input placeholder="Search product (name, SKU, category)" value={search} onChange={e => setSearch(e.target.value)} />
+
+              <input
+                placeholder="Search product (name, SKU, category)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+
               <div className="grid two">
                 <select
                   value={selectedProductId}
                   onChange={(e) => setSelectedProductId(e.target.value)}
+                  disabled={!filteredProducts.length}
                 >
-                  <option value="">Select product</option>
-                  {filteredProducts.map(p => (
-                    <option key={p.id} value={p.id}>{p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})</option>
+                  <option value="">{filteredProducts.length ? 'Select product' : 'No products available'}</option>
+                  {filteredProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
+                    </option>
                   ))}
                 </select>
-                <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)} placeholder="Qty" />
+
+                <input
+                  type="number"
+                  min="1"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  placeholder="Qty"
+                  disabled={!filteredProducts.length}
+                />
               </div>
+
               <div className="hstack" style={{ justifyContent: 'flex-end' }}>
                 <Button type="button" onClick={addItem} disabled={!selectedProductId}>Add Item</Button>
               </div>
@@ -150,7 +211,9 @@ export default function OrderForm({ onClose, onCreated }) {
                     </div>
                   ))}
                   <div className="hstack" style={{ fontWeight: 600 }}>
-                    <div>Total</div><div className="grow" /><div>₹{Number(totals.grandTotal).toFixed(2)}</div>
+                    <div>Total</div>
+                    <div className="grow" />
+                    <div>₹{Number(totals.grandTotal).toFixed(2)}</div>
                   </div>
                 </div>
               )}
@@ -173,6 +236,7 @@ export default function OrderForm({ onClose, onCreated }) {
             Note: Shipping details are added later when the courier picks up the order.
           </div>
         </div>
+
         <div className="modal-footer">
           <Button onClick={save} disabled={saving || !items.length}>Create Order</Button>
         </div>

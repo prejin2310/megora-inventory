@@ -18,5 +18,5 @@
 .modal-footer { border-top: 1px solid #eee; border-bottom: none; }
 .modal-body {
   padding: 16px;
-  overflow: auto; /* scrolls on small screens */
+  overflow: auto; /* allows scroll on small screens */
 }

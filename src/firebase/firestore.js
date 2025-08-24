@@ -59,12 +59,7 @@ export async function getCustomer(id) {
   return { id: snap.id, ...snap.data() }
 }
 
-export async function getCustomerName(customerId) {
-  if (!customerId) return null
-  const c = await getCustomer(customerId)
-  return c?.name || null
-}
-
+// Resolve customer names for orders to display
 export async function resolveCustomerNames(orders) {
   const ids = Array.from(new Set(orders.map(o => o.customerId).filter(Boolean)))
   const cache = {}
@@ -151,7 +146,7 @@ export async function createOrder(data) {
     name: String(it.name || ''),
     price: Number(it.price || 0),
     qty: Number(it.qty || 1),
-    updatedAt: it.updatedAt || nowISO(),
+    updatedAt: it.updatedAt || nowISO(), // client timestamp inside array
   }))
 
   const subtotal =
