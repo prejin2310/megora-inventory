@@ -16,6 +16,8 @@ export default function OrderForm({ onClose, onCreated }) {
   const [search, setSearch] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
   const [qty, setQty] = useState(1)
+
+  // cart: [{ sku, name, price, qty, editing?: boolean, _origPrice?: number }]
   const [items, setItems] = useState([])
 
   const [channel, setChannel] = useState('Manual')
@@ -37,7 +39,6 @@ export default function OrderForm({ onClose, onCreated }) {
     })()
   }, [])
 
-  // Robust client-side search by name, SKU, or category (case-insensitive, trimmed)
   const filteredProducts = useMemo(() => {
     const q = (search || '').trim().toLowerCase()
     if (!q) return products
@@ -49,12 +50,12 @@ export default function OrderForm({ onClose, onCreated }) {
     })
   }, [products, search])
 
-  // Reset selection when search text changes (prevents stale selection)
+  // Reset selection when search changes
   useEffect(() => {
     setSelectedProductId('')
   }, [search])
 
-  // Auto-select first filtered product when list updates and nothing is selected
+  // Auto-select first filtered product when none selected
   useEffect(() => {
     if (!selectedProductId && filteredProducts.length) {
       setSelectedProductId(filteredProducts[0].id)
@@ -66,22 +67,74 @@ export default function OrderForm({ onClose, onCreated }) {
     if (!p) return
     const qn = Math.max(1, Number(qty || 1))
     setItems(prev => {
+      // merge by SKU
       const idx = prev.findIndex(x => x.sku === p.sku)
       if (idx >= 0) {
         const copy = [...prev]
         copy[idx] = { ...copy[idx], qty: copy[idx].qty + qn }
         return copy
       }
-      return [...prev, { sku: p.sku, name: p.name, price: Number(p.price || 0), qty: qn }]
+      return [
+        ...prev,
+        {
+          sku: p.sku,
+          name: p.name,
+          price: Number(p.price || 0),
+          qty: qn,
+          _origPrice: Number(p.price || 0),
+          editing: false,
+        },
+      ]
     })
     setQty(1)
-    setSelectedProductId('') // clear after add
+    setSelectedProductId('')
   }
 
   const removeItem = (sku) => setItems(prev => prev.filter(x => x.sku !== sku))
 
+  const toggleEditPrice = (sku, on) => {
+    setItems(prev =>
+      prev.map(it =>
+        it.sku === sku ? { ...it, editing: on, price: Number(it.price) } : it
+      )
+    )
+  }
+
+  const changePrice = (sku, value) => {
+    setItems(prev =>
+      prev.map(it =>
+        it.sku === sku ? { ...it, price: value } : it
+      )
+    )
+  }
+
+  const savePrice = (sku) => {
+    setItems(prev =>
+      prev.map(it =>
+        it.sku === sku
+          ? { ...it, price: Number(it.price || 0), editing: false }
+          : it
+      )
+    )
+  }
+
+  const cancelPrice = (sku) => {
+    setItems(prev =>
+      prev.map(it =>
+        it.sku === sku ? { ...it, price: Number(it._origPrice || it.price || 0), editing: false } : it
+      )
+    )
+  }
+
+  const changeQty = (sku, value) => {
+    const qn = Math.max(1, Number(value || 1))
+    setItems(prev =>
+      prev.map(it => (it.sku === sku ? { ...it, qty: qn } : it))
+    )
+  }
+
   const subtotal = items.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
-  // No tax at creation. Shipping/discount default 0; editable later in Order Details if needed.
+  // No tax at creation; can be added later. Shipping/discount default 0.
   const totals = { subtotal, shipping: 0, discount: 0, grandTotal: subtotal }
 
   const save = async () => {
@@ -114,10 +167,18 @@ export default function OrderForm({ onClose, onCreated }) {
         if (c) customerSnap = { name: c.name, email: c.email, phone: c.phone }
       }
 
+      // prepare clean items payload for Firestore
+      const payloadItems = items.map(it => ({
+        sku: it.sku,
+        name: it.name,
+        price: Number(it.price),
+        qty: Number(it.qty),
+      }))
+
       const payload = {
         customerId: finalCustomerId || null,
-        customer: customerSnap || null, // embedded snapshot for quick display in lists
-        items,
+        customer: customerSnap || null,
+        items: payloadItems,
         totals,
         channel,
         notes,
@@ -203,11 +264,48 @@ export default function OrderForm({ onClose, onCreated }) {
               {items.length > 0 && (
                 <div className="vstack gap">
                   {items.map(it => (
-                    <div key={it.sku} className="hstack">
-                      <div>{it.name} × {it.qty}</div>
-                      <div className="grow" />
-                      <div>₹{(Number(it.price) * Number(it.qty)).toFixed(2)}</div>
-                      <button className="btn btn-sm btn-ghost" type="button" onClick={() => removeItem(it.sku)}>Remove</button>
+                    <div key={it.sku} className="card">
+                      <div className="hstack">
+                        <div style={{ minWidth: 180 }}>{it.name}</div>
+                        <div className="grow" />
+                        {/* Inline qty edit */}
+                        <div className="hstack" style={{ gap: 6 }}>
+                          <span className="muted">Qty</span>
+                          <input
+                            type="number"
+                            min="1"
+                            value={it.qty}
+                            onChange={(e) => changeQty(it.sku, e.target.value)}
+                            style={{ width: 70 }}
+                          />
+                        </div>
+                        {/* Inline price edit */}
+                        {!it.editing ? (
+                          <div className="hstack" style={{ gap: 8 }}>
+                            <div>₹{Number(it.price).toFixed(2)}</div>
+                            <button className="btn btn-sm btn-ghost" type="button" onClick={() => toggleEditPrice(it.sku, true)}>
+                              Edit price
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="hstack" style={{ gap: 6 }}>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={it.price}
+                              onChange={(e) => changePrice(it.sku, e.target.value)}
+                              style={{ width: 100 }}
+                            />
+                            <button className="btn btn-sm" type="button" onClick={() => savePrice(it.sku)}>Save</button>
+                            <button className="btn btn-sm btn-ghost" type="button" onClick={() => cancelPrice(it.sku)}>Cancel</button>
+                          </div>
+                        )}
+                        {/* Line total */}
+                        <div style={{ width: 110, textAlign: 'right', fontWeight: 600 }}>
+                          ₹{(Number(it.price) * Number(it.qty)).toFixed(2)}
+                        </div>
+                        <button className="btn btn-sm btn-ghost" type="button" onClick={() => removeItem(it.sku)}>Remove</button>
+                      </div>
                     </div>
                   ))}
                   <div className="hstack" style={{ fontWeight: 600 }}>
