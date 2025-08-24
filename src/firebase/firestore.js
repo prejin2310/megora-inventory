@@ -214,3 +214,11 @@ export async function updateOrderShipping(orderId, shipping) {
     updatedAt: serverTimestamp(),
   })
 }
+
+export async function updateOrderEstimated(orderId, estimatedDate) {
+  const ref = doc(db, 'orders', orderId)
+  await updateDoc(ref, {
+    estimatedDelivery: estimatedDate || '', // store ISO/date string
+    updatedAt: serverTimestamp(),
+  })
+}
