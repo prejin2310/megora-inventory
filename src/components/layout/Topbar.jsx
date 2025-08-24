@@ -4,19 +4,13 @@ import Button from '../ui/Button'
 
 export default function Topbar() {
   const { user, logout } = useAuth()
-
-  const toggleSidebar = () => {
-    document.documentElement.classList.toggle('sidebar-open')
-  }
-
   return (
     <header className="topbar">
-      <button className="hamburger" onClick={toggleSidebar} aria-label="Menu">☰</button>
       <div className="brand">Megora Orders</div>
       <div className="grow" />
       {user && (
         <div className="topbar-right">
-          <span className="muted hide-sm">{user.email}</span>
+          <span className="muted">{user.email}</span>
           <Button variant="ghost" onClick={logout}>Logout</Button>
         </div>
       )}

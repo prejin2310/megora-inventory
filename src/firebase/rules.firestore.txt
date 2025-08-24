@@ -1,11 +1,17 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
     function isAdmin() {
-      return request.auth != null && request.auth.token.email == "megoraadmin@example.com";
+      return request.auth != null
+        && request.auth.token.email == "orders.megora@gmail.com"; // <-- exact email
     }
+
     match /{document=**} {
+      // Public reads for app/public pages
       allow read: if true;
+
+      // Only the single admin email can write anywhere
       allow write: if isAdmin();
     }
   }

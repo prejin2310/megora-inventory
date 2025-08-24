@@ -5,10 +5,17 @@ import Table from '../../components/ui/Table'
 
 export default function Customers() {
   const [items, setItems] = useState([])
+  const [error, setError] = useState('') // <-- define error state
 
   const refresh = async () => {
-    const list = await listCustomers()
-    setItems(list)
+    setError('')
+    try {
+      const list = await listCustomers()
+      setItems(list)
+    } catch (e) {
+      console.error('Customers load error:', e)
+      setError(e.message || 'Failed to load customers')
+    }
   }
 
   useEffect(() => {
@@ -16,16 +23,25 @@ export default function Customers() {
   }, [])
 
   const onAdd = async (data) => {
-    await createCustomer(data)
-    await refresh()
+    setError('') // <-- clear before attempting
+    try {
+      await createCustomer(data)
+      await refresh()
+    } catch (e) {
+      console.error('Create customer error:', e)
+      setError(e.message || 'Failed to create customer') // <-- use setError safely
+    }
   }
 
   return (
     <div className="grid two">
-      <CustomerForm onSubmit={onAdd} />
+      <div>
+        {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
+        <CustomerForm onSubmit={onAdd} />
+      </div>
       <Table
         columns={['Name', 'Email', 'Phone', 'Address']}
-        rows={items.map((c) => [c.name, c.email, c.phone, c.address])}
+        rows={items.map(c => [c.name, c.email, c.phone, c.address])}
       />
     </div>
   )

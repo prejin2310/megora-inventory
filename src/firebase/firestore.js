@@ -1,170 +1,181 @@
+// src/firebase/firestore.js
 import {
-  collection, doc, getDoc, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, serverTimestamp, writeBatch, increment
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  addDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  serverTimestamp,
+  arrayUnion,
+  query,
+  where,
+  limit,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { nanoid } from 'nanoid'
 
-export async function createProduct(payload) {
-  const now = serverTimestamp()
-  const ref = await addDoc(collection(db, 'products'), {
-    name: payload.name,
-    sku: payload.sku,
-    price: Number(payload.price),
-    imageUrl: payload.imageUrl || '',
-    description: payload.description || '',
-    stock: Number(payload.stock ?? 0),
-    lowStockThreshold: Number(payload.lowStockThreshold ?? 5),
-    createdAt: now,
-    updatedAt: now,
-  })
-  return ref.id
-}
+const nowISO = () => new Date().toISOString()
 
-export async function updateProduct(id, updates) {
-  updates.updatedAt = serverTimestamp()
-  await updateDoc(doc(db, 'products', id), updates)
-}
-
-export async function deleteProduct(id) {
-  await deleteDoc(doc(db, 'products', id))
-}
-
-export async function listProducts() {
-  const snap = await getDocs(query(collection(db, 'products'), orderBy('name')))
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
-}
-
-export async function adjustStock(productId, delta, reason, refId, userId) {
-  const batch = writeBatch(db)
-  const pRef = doc(db, 'products', productId)
-  batch.update(pRef, { stock: increment(delta), updatedAt: serverTimestamp() })
-  const ledgerRef = doc(collection(db, 'inventory_ledger'))
-  batch.set(ledgerRef, {
-    productId,
-    change: delta,
-    reason,
-    referenceId: refId || null,
-    createdAt: serverTimestamp(),
-    createdBy: userId || null,
-  })
-  await batch.commit()
-}
-
-export async function createCustomer(payload) {
-  const now = serverTimestamp()
-  const ref = await addDoc(collection(db, 'customers'), {
-    name: payload.name,
-    email: payload.email || '',
-    phone: payload.phone || '',
-    address: payload.address || '',
-    createdAt: now,
-    updatedAt: now,
-  })
-  return ref.id
-}
-
+// ---------- Customers ----------
 export async function listCustomers() {
-  const snap = await getDocs(query(collection(db, 'customers'), orderBy('name')))
+  const snap = await getDocs(collection(db, 'customers'))
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
-
-export function calcTotals(items, extras = {}) {
-  const subTotal = items.reduce((sum, it) => sum + Number(it.price) * Number(it.qty), 0)
-  const shipping = Number(extras.shipping || 0)
-  const tax = Number(extras.tax || 0)
-  const discount = Number(extras.discount || 0)
-  const grandTotal = subTotal + shipping + tax - discount
-  return { subTotal, shipping, tax, discount, grandTotal }
-}
-
-export async function createOrder({ customer, customerId, items, extras, channel, courier, payment, userId }) {
-  if (!items?.length) throw new Error('No items')
-  const now = serverTimestamp()
-  const publicId = nanoid(10)
-  const batch = writeBatch(db)
-  const orderRef = doc(collection(db, 'orders'))
-  const totals = calcTotals(items, extras)
-
-  const history = [{ status: 'Received', at: now, by: userId || null }]
-
-  batch.set(orderRef, {
-    publicId,
-    status: 'Received',
-    channel: channel || 'Manual',
-    customer: customerId ? null : customer,
-    customerId: customerId || null,
-    items,
-    totals,
-    courier: courier || { name: '', trackingNumber: '', trackingUrl: '' },
-    payment: payment || { status: 'pending' },
-    history,
-    createdAt: now,
-    updatedAt: now,
-  })
-
-  items.forEach(it => {
-    const pRef = doc(db, 'products', it.productId)
-    batch.update(pRef, { stock: increment(-Number(it.qty)), updatedAt: now })
-    const ledgerRef = doc(collection(db, 'inventory_ledger'))
-    batch.set(ledgerRef, {
-      productId: it.productId,
-      change: -Number(it.qty),
-      reason: 'order',
-      referenceId: orderRef.id,
-      createdAt: now,
-      createdBy: userId || null,
-    })
-  })
-
-  await batch.commit()
-  return { id: orderRef.id, publicId }
-}
-
-export async function updateOrder(orderId, updates, userId) {
-  const now = serverTimestamp()
-  const oRef = doc(db, 'orders', orderId)
-  const patch = { ...updates, updatedAt: now }
-  if (updates.status) {
-    const snap = await getDoc(oRef)
-    const prev = snap.data()
-    patch.history = [...(prev.history || []), { status: updates.status, at: now, by: userId || null }]
+export async function createCustomer(data) {
+  const payload = {
+    name: String(data?.name || ''),
+    email: String(data?.email || ''),
+    phone: String(data?.phone || ''),
+    address: String(data?.address || ''),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
   }
-  await updateDoc(oRef, patch)
+  return addDoc(collection(db, 'customers'), payload)
+}
+export async function updateCustomer(id, data) {
+  const ref = doc(db, 'customers', id)
+  const payload = {
+    ...(data?.name !== undefined ? { name: String(data.name) } : {}),
+    ...(data?.email !== undefined ? { email: String(data.email) } : {}),
+    ...(data?.phone !== undefined ? { phone: String(data.phone) } : {}),
+    ...(data?.address !== undefined ? { address: String(data.address) } : {}),
+    updatedAt: serverTimestamp(),
+  }
+  return updateDoc(ref, payload)
+}
+export async function deleteCustomer(id) {
+  const ref = doc(db, 'customers', id)
+  return deleteDoc(ref)
+}
+export async function getCustomer(id) {
+  const ref = doc(db, 'customers', id)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
 }
 
-export async function cancelOrReturnOrder(orderId, type, userId) {
-  const now = serverTimestamp()
-  const oRef = doc(db, 'orders', orderId)
-  const snap = await getDoc(oRef)
-  if (!snap.exists()) throw new Error('Order not found')
-  const order = snap.data()
-  if (order.status === 'Cancelled' || order.status === 'Returned') return
-
-  const batch = writeBatch(db)
-  const history = [...(order.history || []), { status: type, at: now, by: userId || null }]
-  batch.update(oRef, { status: type, history, updatedAt: now })
-
-  order.items.forEach(it => {
-    const pRef = doc(db, 'products', it.productId)
-    batch.update(pRef, { stock: increment(Number(it.qty)), updatedAt: now })
-    const ledgerRef = doc(collection(db, 'inventory_ledger'))
-    batch.set(ledgerRef, {
-      productId: it.productId,
-      change: Number(it.qty),
-      reason: type.toLowerCase(),
-      referenceId: orderId,
-      createdAt: now,
-      createdBy: userId || null,
-    })
-  })
-
-  await batch.commit()
+// ---------- Products ----------
+export async function listProducts() {
+  const snap = await getDocs(collection(db, 'products'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+export async function createProduct(data) {
+  const payload = {
+    sku: String(data?.sku || ''),
+    name: String(data?.name || ''),
+    price: Number(data?.price || 0),
+    stock: Number(data?.stock || 0),
+    category: String(data?.category || ''),
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  }
+  return addDoc(collection(db, 'products'), payload)
+}
+export async function updateProduct(id, data) {
+  const ref = doc(db, 'products', id)
+  const payload = {
+    ...(data?.sku !== undefined ? { sku: String(data.sku) } : {}),
+    ...(data?.name !== undefined ? { name: String(data.name) } : {}),
+    ...(data?.price !== undefined ? { price: Number(data.price) } : {}),
+    ...(data?.stock !== undefined ? { stock: Number(data.stock) } : {}),
+    ...(data?.category !== undefined ? { category: String(data.category) } : {}),
+    updatedAt: serverTimestamp(),
+  }
+  return updateDoc(ref, payload)
+}
+export async function deleteProduct(id) {
+  const ref = doc(db, 'products', id)
+  return deleteDoc(ref)
+}
+export async function getProduct(id) {
+  const ref = doc(db, 'products', id)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
 }
 
+// ---------- Orders ----------
+export async function listOrders() {
+  const snap = await getDocs(collection(db, 'orders'))
+  return snap.docs.map(d => ({ id: d.id, ...d.data() }))
+}
+export async function getOrder(orderId) {
+  const ref = doc(db, 'orders', orderId)
+  const snap = await getDoc(ref)
+  if (!snap.exists()) return null
+  return { id: snap.id, ...snap.data() }
+}
+// NEW: public lookup by publicId
 export async function getOrderByPublicId(publicId) {
-  const snap = await getDocs(query(collection(db, 'orders'), where('publicId', '==', publicId)))
+  const q = query(collection(db, 'orders'), where('publicId', '==', String(publicId)), limit(1))
+  const snap = await getDocs(q)
   if (snap.empty) return null
-  const docSnap = snap.docs[0]
-  return { id: docSnap.id, ...docSnap.data() }
+  const d = snap.docs[0]
+  return { id: d.id, ...d.data() }
+}
+// Create order safely (no serverTimestamp inside arrays)
+export async function createOrder(data) {
+  const items = Array.isArray(data?.items) ? data.items : []
+  const cleanItems = items.map(it => ({
+    sku: String(it.sku || ''),
+    name: String(it.name || ''),
+    price: Number(it.price || 0),
+    qty: Number(it.qty || 1),
+    updatedAt: it.updatedAt || nowISO(), // client timestamp in array
+  }))
+  const subtotal =
+    data?.totals?.subtotal != null
+      ? Number(data.totals.subtotal)
+      : cleanItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
+  const totals = {
+    subtotal,
+    tax: Number(data?.totals?.tax || 0),
+    shipping: Number(data?.totals?.shipping || 0),
+    discount: Number(data?.totals?.discount || 0),
+  }
+  totals.grandTotal = totals.subtotal + totals.tax + totals.shipping - totals.discount
+
+  const ref = doc(collection(db, 'orders'))
+  const publicId = data?.publicId || `MGO-${Date.now().toString().slice(-6)}`
+  await setDoc(ref, {
+    customerId: data?.customerId || null,
+    customer: data?.customer || null,
+    items: cleanItems,
+    totals,
+    channel: data?.channel || 'Manual',
+    notes: data?.notes || '',
+    status: data?.status || 'Received',
+    publicId,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    history: Array.isArray(data?.history)
+      ? data.history.map(h => ({
+          status: String(h.status || 'Received'),
+          at: h.at || nowISO(),
+          note: h.note || '',
+        }))
+      : [{ status: 'Received', at: nowISO(), note: 'Order created' }],
+  })
+  return { id: ref.id, publicId }
+}
+export async function updateOrderStatus(orderId, nextStatus, note = '') {
+  const ref = doc(db, 'orders', orderId)
+  await updateDoc(ref, {
+    status: nextStatus,
+    updatedAt: serverTimestamp(),
+    history: arrayUnion({ status: nextStatus, at: nowISO(), note }),
+  })
+}
+export async function updateOrderItems(orderId, items) {
+  const cleanItems = (Array.isArray(items) ? items : []).map(it => ({
+    sku: String(it.sku || ''),
+    name: String(it.name || ''),
+    price: Number(it.price || 0),
+    qty: Number(it.qty || 1),
+    updatedAt: it.updatedAt || nowISO(),
+  }))
+  const ref = doc(db, 'orders', orderId)
+  await updateDoc(ref, { items: cleanItems, updatedAt: serverTimestamp() })
 }

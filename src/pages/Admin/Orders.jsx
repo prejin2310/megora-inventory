@@ -10,11 +10,18 @@ export default function Orders() {
   const [orders, setOrders] = useState([])
   const [filter, setFilter] = useState({ status: '', channel: '' })
   const [showCreate, setShowCreate] = useState(false)
+  const [error, setError] = useState('')
   const nav = useNavigate()
 
   const refresh = async () => {
-    const snap = await getDocs(collection(db, 'orders'))
-    setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    setError('')
+    try {
+      const snap = await getDocs(collection(db, 'orders'))
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })))
+    } catch (e) {
+      console.error('Orders load error:', e)
+      setError(e.message || 'Failed to load orders')
+    }
   }
   useEffect(() => { refresh() }, [])
 
@@ -48,19 +55,46 @@ export default function Orders() {
         <Button onClick={() => setShowCreate(true)}>Create Order</Button>
       </div>
 
-      {showCreate && <OrderForm onClose={() => setShowCreate(false)} onCreated={(o) => { setShowCreate(false); nav(`/admin/orders/${o.id}`) }} />}
+      {error && <div className="error">{error}</div>}
+
+      {showCreate && (
+        <OrderForm
+          onClose={() => setShowCreate(false)}
+          onCreated={(o) => { setShowCreate(false); nav(`/admin/orders/${o.id}`) }}
+        />
+      )}
 
       <Table
-        columns={['Public ID', 'Status', 'Customer', 'Total', 'Channel', '']}
-        rows={filtered.map(o => [
-          o.publicId,
-          o.status,
-          o.customer?.name || o.customerId || '-',
-          `₹${o?.totals?.grandTotal?.toFixed(2)}`,
-          o.channel,
-          <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>
-        ])}
-      />
+  columns={['Public ID', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']}
+  rows={filtered.map(o => {
+    const pub = o.publicId || o.id
+    const link = `${location.origin}/o/${pub}`
+    return [
+      pub,
+      o.status,
+      o.customer?.name || o.customerId || '-',
+      `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
+      o.channel,
+      <button
+        key={`copy-${o.id}`}
+        className="btn btn-sm"
+        type="button"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(link)
+            alert(`Copied link:\n${link}`)
+          } catch {
+            prompt('Copy link:', link)
+          }
+        }}
+      >
+        Copy link
+      </button>,
+      <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
+    ]
+  })}
+/>
+
     </div>
   )
 }

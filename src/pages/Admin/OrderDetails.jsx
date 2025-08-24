@@ -1,98 +1,98 @@
 import React, { useEffect, useState } from 'react'
-import { doc, getDoc } from 'firebase/firestore'
-import { db } from '../../firebase/firebase'
-import Button from '../../components/ui/Button'
-import StatusPill from '../../components/ui/StatusPill'
-import { updateOrder, cancelOrReturnOrder } from '../../firebase/firestore'
 import { useParams } from 'react-router-dom'
-import StatusTimeline from '../../components/orders/StatusTimeline'
-import { useAuth } from '../../auth/AuthContext'
-import { generateInvoice } from '../../utils/pdf'
+import { getOrder, updateOrderStatus, updateOrderItems } from '../../firebase/firestore'
+import Button from '../../components/ui/Button'
 
 export default function OrderDetails() {
   const { orderId } = useParams()
   const [order, setOrder] = useState(null)
-  const { user } = useAuth()
+  const [error, setError] = useState('')
 
-  const refresh = async () => {
-    const snap = await getDoc(doc(db, 'orders', orderId))
-    if (snap.exists()) setOrder({ id: snap.id, ...snap.data() })
+  const load = async () => {
+    setError('')
+    try {
+      const o = await getOrder(orderId)
+      setOrder(o)
+    } catch (e) {
+      console.error('Order load error:', e)
+      setError(e.message || 'Failed to load order')
+    }
   }
 
-  useEffect(() => { refresh() }, [orderId])
+  useEffect(() => { load() }, [orderId])
 
-  if (!order) return null
-
-  const move = async (status) => {
-    await updateOrder(order.id, { status }, user?.uid)
-    await refresh()
+  const move = async (next) => {
+    setError('')
+    try {
+      await updateOrderStatus(orderId, next, `Moved to ${next}`)
+      await load()
+    } catch (e) {
+      console.error('Update status error:', e)
+      setError(e.message || 'Failed to update status')
+    }
   }
 
-  const cancel = async () => {
-    await cancelOrReturnOrder(order.id, 'Cancelled', user?.uid)
-    await refresh()
-  }
+  if (!order) return <div>Loading…</div>
 
-  const markReturn = async () => {
-    await cancelOrReturnOrder(order.id, 'Returned', user?.uid)
-    await refresh()
+  const canAdvance = (from, to) => {
+    const flow = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Delivered']
+    return flow.indexOf(to) > flow.indexOf(from)
   }
 
   return (
     <div className="vstack gap">
-      <div className="hstack">
-        <h2>Order #{order.publicId}</h2>
-        <StatusPill status={order.status} />
-      </div>
+      <h2>Order #{order.id}</h2>
+      {error && <div className="error">{error}</div>}
 
       <div className="grid two">
         <div className="card">
-          <h4>Customer</h4>
-          <div>{order.customer?.name || order.customerId}</div>
-          <div className="muted">{order.customer?.email}</div>
-          <div className="muted">{order.customer?.phone}</div>
-          <div>{order.customer?.address}</div>
+          <div className="hstack">
+            <div className="pill">{order.status}</div>
+            <div className="grow" />
+            {canAdvance(order.status, 'Packed') && (
+              <Button onClick={() => move('Packed')}>Mark Packed</Button>
+            )}
+            {canAdvance(order.status, 'Waiting for Pickup') && (
+              <Button onClick={() => move('Waiting for Pickup')}>Waiting</Button>
+            )}
+            {canAdvance(order.status, 'In Transit') && (
+              <Button onClick={() => move('In Transit')}>In Transit</Button>
+            )}
+            {canAdvance(order.status, 'Delivered') && (
+              <Button onClick={() => move('Delivered')}>Delivered</Button>
+            )}
+          </div>
         </div>
 
         <div className="card">
-          <h4>Courier</h4>
-          <div>{order.courier?.name}</div>
-          <div className="muted">{order.courier?.trackingNumber}</div>
-          {order.courier?.trackingUrl && <a href={order.courier.trackingUrl} target="_blank" rel="noreferrer">Tracking Link</a>}
+          <h3>History</h3>
+          <div className="timeline">
+            {(order.history || []).map((h, i) => (
+              <div key={i} className="timeline-item">
+                <div className="timeline-dot" />
+                <div><strong>{h.status}</strong> • {h.at}</div>
+                {h.note && <div className="muted">{h.note}</div>}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       <div className="card">
-        <h4>Items</h4>
-        <ul>
-          {order.items.map((it, i) => (
-            <li key={i}>{it.name} × {it.qty} — ₹{(it.price * it.qty).toFixed(2)}</li>
+        <h3>Items</h3>
+        <div className="grid two">
+          {(order.items || []).map((it, i) => (
+            <div key={i} className="card">
+              <div className="hstack">
+                <div>{it.name} x {it.qty}</div>
+                <div className="grow" />
+                <div>₹{Number(it.price).toFixed(2)}</div>
+              </div>
+              {it.updatedAt && <div className="muted">updated: {it.updatedAt}</div>}
+            </div>
           ))}
-        </ul>
-        <div className="hstack">
-          <div>Subtotal: ₹{order.totals.subTotal.toFixed(2)}</div>
-          <div>Tax: ₹{order.totals.tax.toFixed(2)}</div>
-          <div>Shipping: ₹{order.totals.shipping.toFixed(2)}</div>
-          <div>Discount: ₹{order.totals.discount.toFixed(2)}</div>
-          <div><b>Total: ₹{order.totals.grandTotal.toFixed(2)}</b></div>
         </div>
       </div>
-
-      <StatusTimeline history={order.history} />
-
-      <div className="hstack">
-       <div className="bottom-bar">
-  {order.status === 'Received' && <Button onClick={() => move('Packed')}>Mark Packed</Button>}
-  {order.status === 'Packed' && <Button onClick={() => move('Waiting for Pickup')}>Waiting</Button>}
-  {order.status === 'Waiting for Pickup' && <Button onClick={() => move('In Transit')}>In Transit</Button>}
-  {order.status === 'In Transit' && <Button onClick={() => move('Delivered')}>Delivered</Button>}
-  {['Received', 'Packed', 'Waiting for Pickup', 'In Transit'].includes(order.status) && <Button variant="danger" onClick={cancel}>Cancel</Button>}
-  {order.status === 'Delivered' && <Button variant="danger" onClick={markReturn}>Returned</Button>}
-</div>
-
-      </div>
-
-      <Button onClick={() => generateInvoice(order)}>Download Invoice</Button>
     </div>
   )
 }

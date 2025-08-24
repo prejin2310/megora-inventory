@@ -1,52 +1,65 @@
 import React, { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getOrderByPublicId } from '../../firebase/firestore'
-import StatusTimeline from '../../components/orders/StatusTimeline'
+
 
 export default function PublicOrder() {
   const { publicId } = useParams()
   const [order, setOrder] = useState(null)
+  const [error, setError] = useState('')
 
   useEffect(() => {
-    getOrderByPublicId(publicId).then(setOrder)
+    let mounted = true
+    ;(async () => {
+      setError('')
+      try {
+        const o = await getOrderByPublicId(publicId)
+        if (mounted) setOrder(o)
+        if (!o && mounted) setError('Order not found')
+      } catch (e) {
+        console.error('Public order load error:', e)
+        if (mounted) setError(e.message || 'Failed to load order')
+      }
+    })()
+    return () => { mounted = false }
   }, [publicId])
 
-  if (!order) return <div className="center muted">Order not found</div>
+  if (error) return <div className="public-main"><div className="error">{error}</div></div>
+  if (!order) return <div className="public-main">Loading…</div>
 
   return (
-    <div className="vstack gap narrow">
-      <h2>Order #{order.publicId}</h2>
+    <div className="public-main narrow vstack gap">
+      <h2>Order #{order.publicId || order.id}</h2>
+
       <div className="card">
-        <h4>Summary</h4>
-        <ul>
-          {order.items.map((it, i) => (
-            <li key={i}>{it.name} × {it.qty} — ₹{(it.price * it.qty).toFixed(2)}</li>
-          ))}
-        </ul>
-        <div className="hstack">
-          <div>Subtotal: ₹{order.totals.subTotal.toFixed(2)}</div>
-          <div>Tax: ₹{order.totals.tax.toFixed(2)}</div>
-          <div>Shipping: ₹{order.totals.shipping.toFixed(2)}</div>
-          <div>Discount: ₹{order.totals.discount.toFixed(2)}</div>
-          <div><b>Total: ₹{order.totals.grandTotal.toFixed(2)}</b></div>
+        <div>Status: <strong>{order.status}</strong></div>
+        <div className="muted">
+          Placed: {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleString() : (order.createdAt || '')}
         </div>
       </div>
 
       <div className="card">
-        <h4>Shipping Address</h4>
-        <div>{order.customer?.name}</div>
-        <div>{order.customer?.address}</div>
+        <h3>Items</h3>
+        <div className="grid two">
+          {(order.items || []).map((it, i) => (
+            <div key={i} className="hstack">
+              <div>{it.name} × {it.qty}</div>
+              <div className="grow" />
+              <div>₹{Number(it.price || 0).toFixed(2)}</div>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="card">
-        <h4>Courier</h4>
-        <div>{order.courier?.name}</div>
-        {order.courier?.trackingUrl && <a href={order.courier.trackingUrl} target="_blank" rel="noreferrer">Tracking</a>}
-      </div>
-
-      <div className="card">
-        <h4>Status</h4>
-        <StatusTimeline history={order.history} />
+        <h3>Totals</h3>
+        <div className="vstack gap">
+          <div className="hstack"><div>Subtotal</div><div className="grow" /><div>₹{Number(order?.totals?.subtotal || 0).toFixed(2)}</div></div>
+          <div className="hstack"><div>Tax</div><div className="grow" /><div>₹{Number(order?.totals?.tax || 0).toFixed(2)}</div></div>
+          <div className="hstack"><div>Shipping</div><div className="grow" /><div>₹{Number(order?.totals?.shipping || 0).toFixed(2)}</div></div>
+          <div className="hstack"><div>Discount</div><div className="grow" /><div>-₹{Number(order?.totals?.discount || 0).toFixed(2)}</div></div>
+          <div className="hstack" style={{ fontWeight: 600 }}><div>Grand Total</div><div className="grow" /><div>₹{Number(order?.totals?.grandTotal || 0).toFixed(2)}</div></div>
+        </div>
       </div>
     </div>
   )

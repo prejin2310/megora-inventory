@@ -5,7 +5,7 @@ const columns = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Deli
 
 export default function Kanban({ orders }) {
   return (
-    <div className="kanban scroller-x">
+    <div className="kanban">
       {columns.map(col => (
         <div key={col} className="kanban-col">
           <div className="kanban-col-title">{col}</div>
