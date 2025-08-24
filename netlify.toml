@@ -1,0 +1,15 @@
+# netlify.toml
+# Use this if you’re deploying a React SPA (React Router) to Netlify.
+# Adjust the publish directory to your bundler output:
+# - Vite: publish = "dist"
+# - CRA:  publish = "build"
+
+[build]
+  command = "npm run build"
+  publish = "dist"   # change to "build" if using Create React App
+
+# SPA redirect so deep links like /o/OR-20250824-0001 load index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

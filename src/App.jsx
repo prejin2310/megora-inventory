@@ -11,7 +11,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/admin/*" element={<AdminRoutes />} />
-        <Route path="/o/*" element={<PublicRoutes />} />
+        <Route path="/o/:publicId" element={<PublicOrder />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </AuthProvider>
