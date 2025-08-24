@@ -13,7 +13,8 @@ import {
   query,
   where,
   limit,
-  increment, // <-- add this for atomic stock increments
+  increment, // atomic stock increments (kept)
+  runTransaction, // NEW: for continuous public ID
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -81,7 +82,7 @@ export async function listProducts() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-// CREATE: now persists image, minStock, description (and trims strings)
+// CREATE: persists image, minStock, description (and trims strings)
 export async function createProduct(data) {
   const payload = {
     sku: String(data?.sku || '').trim(),
@@ -89,7 +90,6 @@ export async function createProduct(data) {
     price: Number(data?.price || 0),
     stock: Number(data?.stock || 0),
     category: String(data?.category || '').trim(),
-    // new/ensured fields:
     image: String(data?.image || '').trim(),
     minStock: Number(data?.minStock ?? 5),
     description: String(data?.description || '').trim(),
@@ -108,7 +108,6 @@ export async function updateProduct(id, data) {
     ...(data?.price !== undefined ? { price: Number(data.price) } : {}),
     ...(data?.stock !== undefined ? { stock: Number(data.stock) } : {}),
     ...(data?.category !== undefined ? { category: String(data.category).trim() } : {}),
-    // new/ensured fields:
     ...(data?.image !== undefined ? { image: String(data.image).trim() } : {}),
     ...(data?.minStock !== undefined ? { minStock: Number(data.minStock) } : {}),
     ...(data?.description !== undefined ? { description: String(data.description).trim() } : {}),
@@ -150,7 +149,32 @@ export async function getOrderByPublicId(publicId) {
   return { id: d.id, ...d.data() }
 }
 
-// Create order: no shipping at creation, no tax in item-input stage
+// NEW: continuous, sortable Public ID: OR-YYYYMMDD-#### (daily counter with transaction)
+async function nextPublicOrderId() {
+  const pad = (n, w = 4) => String(n).padStart(w, '0')
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = pad(now.getMonth() + 1, 2)
+  const dd = pad(now.getDate(), 2)
+  const dayKey = `${yyyy}${mm}${dd}`
+
+  const ref = doc(db, 'counters', 'publicOrderId', 'days', dayKey)
+  const id = await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    let next = 1
+    if (snap.exists()) {
+      const cur = Number(snap.data()?.seq || 0)
+      next = cur + 1
+      tx.update(ref, { seq: next, updatedAt: serverTimestamp() })
+    } else {
+      tx.set(ref, { seq: next, createdAt: serverTimestamp(), updatedAt: serverTimestamp() })
+    }
+    return `OR-${dayKey}-${pad(next, 4)}`
+  })
+  return id
+}
+
+// Create order: no shipping object at creation; supports totals, payment, publicId
 export async function createOrder(data) {
   const items = Array.isArray(data?.items) ? data.items : []
   const cleanItems = items.map(it => ({
@@ -158,24 +182,41 @@ export async function createOrder(data) {
     name: String(it.name || ''),
     price: Number(it.price || 0),
     qty: Number(it.qty || 1),
+    // Allow these to pass-through if you later include them from the UI:
+    ...(it.productId !== undefined ? { productId: it.productId || null } : {}),
+    ...(it.image !== undefined ? { image: String(it.image || '').trim() } : {}),
     updatedAt: it.updatedAt || nowISO(), // client timestamp inside array
   }))
 
+  // Subtotal compute fallback
   const subtotal =
     data?.totals?.subtotal != null
       ? Number(data.totals.subtotal)
       : cleanItems.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
 
+  // Totals with optional discountPct; tax kept 0 by your design
   const totals = {
     subtotal,
     tax: 0,
     shipping: Number(data?.totals?.shipping || 0),
     discount: Number(data?.totals?.discount || 0),
+    ...(data?.totals?.discountPct !== undefined ? { discountPct: Number(data.totals.discountPct) } : {}),
   }
   totals.grandTotal = totals.subtotal + totals.shipping - totals.discount
 
+  // Payment (optional)
+  const payment = data?.payment
+    ? {
+        mode: String(data.payment?.mode || ''),
+        status: String(data.payment?.status || ''),
+        txnId: String(data.payment?.txnId || ''),
+      }
+    : null
+
+  // Generate continuous publicId if none provided
   const ref = doc(collection(db, 'orders'))
-  const publicId = data?.publicId || `MGO-${Date.now().toString().slice(-6)}`
+  const publicId = data?.publicId || await nextPublicOrderId()
+
   await setDoc(ref, {
     customerId: data?.customerId || null,
     customer: data?.customer || null,
@@ -185,6 +226,7 @@ export async function createOrder(data) {
     notes: data?.notes || '',
     status: data?.status || 'Received',
     publicId,
+    ...(payment ? { payment } : {}),
     // shipping omitted at creation
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -208,6 +250,8 @@ export async function updateOrderItems(orderId, items) {
     name: String(it.name || ''),
     price: Number(it.price || 0),
     qty: Number(it.qty || 1),
+    ...(it.productId !== undefined ? { productId: it.productId || null } : {}),
+    ...(it.image !== undefined ? { image: String(it.image || '').trim() } : {}),
     updatedAt: it.updatedAt || nowISO(),
   }))
   const ref = doc(db, 'orders', orderId)
@@ -222,6 +266,7 @@ export async function updateOrderShipping(orderId, shipping) {
       awb: String(shipping?.awb || ''),
       pickupAt: String(shipping?.pickupAt || ''),
       notes: String(shipping?.notes || ''),
+      ...(shipping?.trackingUrl ? { trackingUrl: String(shipping.trackingUrl) } : {}),
     },
     updatedAt: serverTimestamp(),
   })

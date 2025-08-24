@@ -1,5 +1,12 @@
+// src/pages/Admin/Orders.jsx
+// Changes:
+// - Sort newest first using createdAt desc with fallback to continuous Public ID desc.
+// - Display Public ID as a continuous, sortable string (assumes createOrder now sets it).
+// - Subtle "Delivered" style already handled by StatusPill map (kept).
+// - Minor: add createdAt column (optional, toggle via SHOW_CREATED_AT flag).
+
 import React, { useEffect, useMemo, useState } from 'react'
-import { collection, getDocs } from 'firebase/firestore'
+import { collection, getDocs, query, orderBy } from 'firebase/firestore'
 import { db } from '../../firebase/firebase'
 import Button from '../../components/ui/Button'
 import OrderForm from '../../components/orders/OrderForm'
@@ -7,15 +14,18 @@ import Table from '../../components/ui/Table'
 import { useNavigate } from 'react-router-dom'
 import { resolveCustomerNames } from '../../firebase/firestore'
 
-// Color map for statuses
+// Toggle to show/hide Created At column (kept off by default for a cleaner table)
+const SHOW_CREATED_AT = false
+
+// Color map for statuses (Delivered is already subtle)
 const STATUS_STYLE = {
-  'Received':           { color: '#0ea5e9', bg: '#eff6ff', border: '#dbeafe' },
-  'Packed':             { color: '#6366f1', bg: '#eef2ff', border: '#e0e7ff' },
-  'Waiting for Pickup': { color: '#f59e0b', bg: '#fffbeb', border: '#fef3c7' },
-  'In Transit':         { color: '#16a34a', bg: '#ecfdf5', border: '#bbf7d0' },
-  'Delivered':          { color: '#10b981', bg: '#ecfdf5', border: '#bbf7d0' },
-  'Cancelled':          { color: '#ef4444', bg: '#fef2f2', border: '#fecaca' },
-  'Returned':           { color: '#f97316', bg: '#fff7ed', border: '#fed7aa' },
+  'Received':            { color: '#0ea5e9', bg: '#eff6ff', border: '#dbeafe' },
+  'Packed':              { color: '#6366f1', bg: '#eef2ff', border: '#e0e7ff' },
+  'Waiting for Pickup':  { color: '#f59e0b', bg: '#fffbeb', border: '#fef3c7' },
+  'In Transit':          { color: '#16a34a', bg: '#ecfdf5', border: '#bbf7d0' },
+  'Delivered':           { color: '#475569', bg: '#f1f5f9', border: '#e2e8f0' }, // toned down
+  'Cancelled':           { color: '#ef4444', bg: '#fef2f2', border: '#fecaca' },
+  'Returned':            { color: '#f97316', bg: '#fff7ed', border: '#fed7aa' },
 }
 
 function StatusPill({ text }) {
@@ -51,8 +61,27 @@ export default function Orders() {
     setError('')
     setLoading(true)
     try {
-      const snap = await getDocs(collection(db, 'orders'))
-      const raw = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      // Prefer server-side ordering by createdAt desc when available
+      let raw = []
+      try {
+        const qy = query(collection(db, 'orders'), orderBy('createdAt', 'desc'))
+        const snap = await getDocs(qy)
+        raw = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+      } catch {
+        // Fallback: plain get + client sort (if index missing or older docs)
+        const snap = await getDocs(collection(db, 'orders'))
+        raw = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+        raw = raw.sort((a, b) => {
+          const ta = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime()
+          const tb = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime()
+          if (tb !== ta) return tb - ta
+          // Fallback to Public ID desc if same/absent timestamps
+          const pa = String(a.publicId || '')
+          const pb = String(b.publicId || '')
+          return pb.localeCompare(pa)
+        })
+      }
+
       const withNames = await resolveCustomerNames(raw)
       setOrders(withNames)
     } catch (e) {
@@ -82,6 +111,72 @@ export default function Orders() {
       return pub.includes(qq) || oid.includes(qq) || cust.includes(qq) || ch.includes(qq) || skuMatch
     })
   }, [orders, filter, q])
+
+  // Compute table columns dynamically if showing createdAt
+  const columns = useMemo(() => {
+    const base = ['Public ID', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']
+    if (SHOW_CREATED_AT) {
+      // Insert Created At as second column (after Public ID)
+      return ['Public ID', 'Created At', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']
+    }
+    return base
+  }, [])
+
+  const rows = useMemo(() => {
+    return filtered.map(o => {
+      const pub = o.publicId || o.id
+      const link = `${location.origin}/o/${pub}`
+      const displayName = o._customerName || o.customer?.name || o.customerId?.slice(0, 12) || '-'
+      const createdAtText = (() => {
+        try {
+          const d = o.createdAt?.toDate ? o.createdAt.toDate() : (o.createdAt ? new Date(o.createdAt) : null)
+          return d ? d.toLocaleString() : '-'
+        } catch {
+          return '-'
+        }
+      })()
+
+      const baseCells = [
+        // Public ID clickable to details
+        <button
+          key={`open-${o.id}`}
+          className="linklike"
+          type="button"
+          onClick={() => nav(`/admin/orders/${o.id}`)}
+          title="Open order details"
+        >
+          {pub}
+        </button>,
+
+        SHOW_CREATED_AT ? createdAtText : null,
+
+        // Status with visual pill
+        <StatusPill key={`st-${o.id}`} text={o.status} />,
+        displayName,
+        `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
+        o.channel || '-',
+        <button
+          key={`copy-${o.id}`}
+          className="btn btn-sm"
+          type="button"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(link)
+              alert(`Copied link:\n${link}`)
+            } catch {
+              prompt('Copy link:', link)
+            }
+          }}
+        >
+          Copy link
+        </button>,
+        <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
+      ]
+
+      // If createdAt is hidden, filter null
+      return baseCells.filter(c => c !== null)
+    })
+  }, [filtered, nav])
 
   return (
     <div className="vstack gap">
@@ -134,49 +229,12 @@ export default function Orders() {
         <div className="muted">Loading…</div>
       ) : (
         <Table
-          columns={['Public ID', 'Status', 'Customer', 'Total', 'Channel', 'Share', '']}
-          rows={filtered.map(o => {
-            const pub = o.publicId || o.id
-            const link = `${location.origin}/o/${pub}`
-            const displayName = o._customerName || o.customer?.name || o.customerId?.slice(0, 12) || '-'
-            return [
-              // Make Public ID clickable to details as well
-              <button
-                key={`open-${o.id}`}
-                className="linklike"
-                type="button"
-                onClick={() => nav(`/admin/orders/${o.id}`)}
-                title="Open order details"
-              >
-                {pub}
-              </button>,
-              // Status with visual pill
-              <StatusPill key={`st-${o.id}`} text={o.status} />,
-              displayName,
-              `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
-              o.channel || '-',
-              <button
-                key={`copy-${o.id}`}
-                className="btn btn-sm"
-                type="button"
-                onClick={async () => {
-                  try {
-                    await navigator.clipboard.writeText(link)
-                    alert(`Copied link:\n${link}`)
-                  } catch {
-                    prompt('Copy link:', link)
-                  }
-                }}
-              >
-                Copy link
-              </button>,
-              <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
-            ]
-          })}
+          columns={columns}
+          rows={rows}
         />
       )}
 
-      {/* Scoped styles for search + link + optional tweaks */}
+      {/* Scoped styles */}
       <style>{`
         .searchbar {
           position: relative;
