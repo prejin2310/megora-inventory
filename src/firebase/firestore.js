@@ -1,3 +1,4 @@
+// src/firebase/firestore.js
 import {
   collection,
   doc,
@@ -12,6 +13,7 @@ import {
   query,
   where,
   limit,
+  increment, // <-- add this for atomic stock increments
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -79,27 +81,37 @@ export async function listProducts() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
+// CREATE: now persists image, minStock, description (and trims strings)
 export async function createProduct(data) {
   const payload = {
-    sku: String(data?.sku || ''),
-    name: String(data?.name || ''),
+    sku: String(data?.sku || '').trim(),
+    name: String(data?.name || '').trim(),
     price: Number(data?.price || 0),
     stock: Number(data?.stock || 0),
-    category: String(data?.category || ''),
+    category: String(data?.category || '').trim(),
+    // new/ensured fields:
+    image: String(data?.image || '').trim(),
+    minStock: Number(data?.minStock ?? 5),
+    description: String(data?.description || '').trim(),
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }
   return addDoc(collection(db, 'products'), payload)
 }
 
+// UPDATE: allows updating image, minStock, description (only when provided)
 export async function updateProduct(id, data) {
   const ref = doc(db, 'products', id)
   const payload = {
-    ...(data?.sku !== undefined ? { sku: String(data.sku) } : {}),
-    ...(data?.name !== undefined ? { name: String(data.name) } : {}),
+    ...(data?.sku !== undefined ? { sku: String(data.sku).trim() } : {}),
+    ...(data?.name !== undefined ? { name: String(data.name).trim() } : {}),
     ...(data?.price !== undefined ? { price: Number(data.price) } : {}),
     ...(data?.stock !== undefined ? { stock: Number(data.stock) } : {}),
-    ...(data?.category !== undefined ? { category: String(data.category) } : {}),
+    ...(data?.category !== undefined ? { category: String(data.category).trim() } : {}),
+    // new/ensured fields:
+    ...(data?.image !== undefined ? { image: String(data.image).trim() } : {}),
+    ...(data?.minStock !== undefined ? { minStock: Number(data.minStock) } : {}),
+    ...(data?.description !== undefined ? { description: String(data.description).trim() } : {}),
     updatedAt: serverTimestamp(),
   }
   return updateDoc(ref, payload)
@@ -131,8 +143,8 @@ export async function getOrder(orderId) {
 }
 
 export async function getOrderByPublicId(publicId) {
-  const q = query(collection(db, 'orders'), where('publicId', '==', String(publicId)), limit(1))
-  const snap = await getDocs(q)
+  const qy = query(collection(db, 'orders'), where('publicId', '==', String(publicId)), limit(1))
+  const snap = await getDocs(qy)
   if (snap.empty) return null
   const d = snap.docs[0]
   return { id: d.id, ...d.data() }
@@ -223,6 +235,7 @@ export async function updateOrderEstimated(orderId, estimatedDate) {
   })
 }
 
+// Stock update: supports setTo (absolute) or add (delta) using atomic increment
 export async function updateProductStock(productId, { setTo = null, add = null }) {
   const ref = doc(db, 'products', productId)
   if (setTo != null) {
@@ -234,10 +247,9 @@ export async function updateProductStock(productId, { setTo = null, add = null }
   }
 }
 
-
 export async function getProductBySku(sku) {
-  const q = query(collection(db, 'products'), where('sku', '==', sku))
-  const snap = await getDocs(q)
+  const qy = query(collection(db, 'products'), where('sku', '==', String(sku)))
+  const snap = await getDocs(qy)
   if (snap.empty) return null
   const docSnap = snap.docs[0]
   return { id: docSnap.id, ...docSnap.data() }
