@@ -23,6 +23,16 @@ export default function OrderForm({ onClose, onCreated }) {
   const [channel, setChannel] = useState('Manual')
   const [notes, setNotes] = useState('')
 
+  // NEW: totals inputs
+  const [shipAmount, setShipAmount] = useState('0') // currency
+  const [discAmount, setDiscAmount] = useState('0') // currency
+  const [discPct, setDiscPct] = useState('')        // percentage, optional
+
+  // NEW: payment inputs
+  const [payMode, setPayMode] = useState('COD')         // UPI, Card, NetBanking, COD, Wallet, Other
+  const [payStatus, setPayStatus] = useState('Pending') // Pending, Paid, Failed, Refunded
+  const [payTxn, setPayTxn] = useState('')
+
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -133,9 +143,44 @@ export default function OrderForm({ onClose, onCreated }) {
     )
   }
 
+  // Totals math
   const subtotal = items.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
-  // No tax at creation; can be added later. Shipping/discount default 0.
-  const totals = { subtotal, shipping: 0, discount: 0, grandTotal: subtotal }
+
+  // If amount present, it takes precedence; otherwise compute from % (if any)
+  const discAmtNum = useMemo(() => {
+    const byAmount = Number(discAmountSafe(discAmount))
+    if (byAmount > 0) return byAmount
+    const pct = Number(discPctSafe(discPct))
+    if (pct > 0) return round2((subtotal * pct) / 100)
+    return 0
+  }, [discAmount, discPct, subtotal])
+
+  const shippingNum = Number(numSafe(shipAmount))
+  const grandTotal = round2(subtotal + shippingNum - discAmtNum)
+
+  const totals = {
+    subtotal: round2(subtotal),
+    shipping: round2(shippingNum),
+    discount: round2(discAmtNum),
+    discountPct: Number(discPctSafe(discPct)) || 0,
+    grandTotal,
+  }
+
+  function numSafe(v) {
+    const n = Number(v)
+    return Number.isFinite(n) ? n : 0
+  }
+  function discAmountSafe(v) {
+    const n = Number(v)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+  function discPctSafe(v) {
+    const n = Number(v)
+    return Number.isFinite(n) && n >= 0 ? n : 0
+  }
+  function round2(v) {
+    return Math.round((Number(v) || 0) * 100) / 100
+  }
 
   const save = async () => {
     setError('')
@@ -175,6 +220,13 @@ export default function OrderForm({ onClose, onCreated }) {
         qty: Number(it.qty),
       }))
 
+      // NEW: payment object (optional)
+      const payment = {
+        mode: payMode,              // UPI | Card | NetBanking | COD | Wallet | Other
+        status: payStatus,          // Pending | Paid | Failed | Refunded
+        txnId: (payStatus === 'Paid' || payStatus === 'Refunded') ? (payTxn || '').trim() : '', // only if paid/refunded
+      }
+
       const payload = {
         customerId: finalCustomerId || null,
         customer: customerSnap || null,
@@ -182,7 +234,8 @@ export default function OrderForm({ onClose, onCreated }) {
         totals,
         channel,
         notes,
-        // shipping intentionally omitted at creation
+        payment, // NEW
+        // shipping intentionally omitted at creation (added when dispatching)
       }
 
       const { id } = await createOrder(payload)
@@ -308,10 +361,91 @@ export default function OrderForm({ onClose, onCreated }) {
                       </div>
                     </div>
                   ))}
+
+                  {/* NEW: Totals editor */}
+                  <div className="card vstack gap">
+                    <h4>Totals</h4>
+                    <div className="grid two">
+                      <div className="vstack">
+                        <label className="muted">Shipping charge</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={shipAmount}
+                          onChange={e => setShipAmount(e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="vstack">
+                        <label className="muted">Discount amount</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={discAmount}
+                          onChange={e => setDiscAmount(e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="vstack">
+                        <label className="muted">Discount % (optional)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={discPct}
+                          onChange={e => setDiscPct(e.target.value)}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="vstack">
+                        <label className="muted">Subtotal</label>
+                        <div style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</div>
+                      </div>
+                      <div className="vstack">
+                        <label className="muted">Grand Total</label>
+                        <div style={{ fontWeight: 800, fontSize: 16 }}>₹{grandTotal.toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="muted small">
+                      If both discount amount and % are provided, amount is used and % is ignored.
+                    </div>
+                  </div>
+
+                  {/* NEW: Payment details */}
+                  <div className="card vstack gap">
+                    <h4>Payment</h4>
+                    <div className="grid two">
+                      <select value={payMode} onChange={e => setPayMode(e.target.value)}>
+                        <option>COD</option>
+                        <option>UPI</option>
+                        <option>Card</option>
+                        <option>NetBanking</option>
+                        <option>Wallet</option>
+                        <option>Other</option>
+                      </select>
+
+                      <select value={payStatus} onChange={e => setPayStatus(e.target.value)}>
+                        <option>Pending</option>
+                        <option>Paid</option>
+                        <option>Failed</option>
+                        <option>Refunded</option>
+                      </select>
+
+                      <input
+                        placeholder="TXN ID (if paid/refunded)"
+                        value={payTxn}
+                        onChange={e => setPayTxn(e.target.value)}
+                        disabled={!(payStatus === 'Paid' || payStatus === 'Refunded')}
+                      />
+                    </div>
+                    <div className="muted small">
+                      TXN ID is enabled only for Paid/Refunded. For COD, leave status Pending until collected.
+                    </div>
+                  </div>
+
                   <div className="hstack" style={{ fontWeight: 600 }}>
                     <div>Total</div>
                     <div className="grow" />
-                    <div>₹{Number(totals.grandTotal).toFixed(2)}</div>
+                    <div>₹{Number(grandTotal).toFixed(2)}</div>
                   </div>
                 </div>
               )}
@@ -319,19 +453,20 @@ export default function OrderForm({ onClose, onCreated }) {
           </div>
 
           <div className="card vstack gap">
-            <h4>Meta</h4>
+            <h4>Order Received Channel</h4>
             <div className="grid two">
               <select value={channel} onChange={e => setChannel(e.target.value)}>
-                <option>Manual</option>
+                <option>Collab/promotion</option>
                 <option>WhatsApp</option>
                 <option>Instagram</option>
+                <option>Website</option>
               </select>
               <input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
           </div>
 
           <div className="muted">
-            Note: Shipping details are added later when the courier picks up the order.
+            Note: Shipping details (courier, AWB) are added later when dispatching.
           </div>
         </div>
 
