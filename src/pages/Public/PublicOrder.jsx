@@ -114,7 +114,7 @@ export default function PublicOrder() {
             <div className="po-brand-sub">Exclusive online store — shop anytime anywhere!</div>
             <div className="po-brand-sub">
               <a className="po-site" href="https://megorajewels.com" target="_blank" rel="noopener noreferrer">
-                megorajewels.com
+                www.megorajewels.com
               </a>
             </div>
           </div>
@@ -145,8 +145,8 @@ export default function PublicOrder() {
           {/* Greeting (white on mobile) */}
           <section className="po-card po-greet-card">
             <div className="po-greet">
-              <div className="po-greet-line">Dear {customerName},</div>
-              <div className="po-muted">Thank you for your order. Below are your order details and progress.</div>
+              <div className="po-greet-line">Dear <strong>{customerName}</strong>,</div>
+              <div className="po-muted"><br></br>Thank you for your order. Below are your order details and progress.</div>
             </div>
           </section>
 
@@ -355,7 +355,7 @@ export default function PublicOrder() {
 }
 .po-brand-name { font-weight: 800; letter-spacing: .3px; font-size: 20px; }
 .po-brand-sub { color: #e9f8f3; font-size: 13px; }
-.po-site { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; }
+.po-site { color: #ffffff; text-decoration: none; text-underline-offset: 3px; }
 
 /* Right-side round card */
 .po-order-side { display: grid; justify-items: end; }
@@ -385,7 +385,7 @@ export default function PublicOrder() {
         .po-logo { width: 100%; max-width: 120px; height: auto; object-fit: contain; filter: brightness(1.03); }
         .po-brand-name { font-weight: 800; letter-spacing: .3px; font-size: 20px; }
         .po-brand-sub { color: #e9f8f3; font-size: 13px; }
-        .po-site { color: #ffffff; text-decoration: underline; text-underline-offset: 3px; }
+        .po-site { color: #ffffff; text-decoration: none; text-underline-offset: 3px; }
 
         /* Right-side round card */
         .po-order-side { display: grid; justify-items: end; }
