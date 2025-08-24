@@ -17,7 +17,7 @@ export default function OrderForm({ onClose, onCreated }) {
   const [selectedProductId, setSelectedProductId] = useState('')
   const [qty, setQty] = useState(1)
 
-  // cart: [{ sku, name, price, qty, editing?: boolean, _origPrice?: number }]
+  // cart: [{ sku, name, price, qty, editing?: boolean, _origPrice?: number, image?: string, productId?: string }]
   const [items, setItems] = useState([])
 
   const [channel, setChannel] = useState('Manual')
@@ -93,6 +93,9 @@ export default function OrderForm({ onClose, onCreated }) {
           qty: qn,
           _origPrice: Number(p.price || 0),
           editing: false,
+          // NEW: capture image and productId silently
+          image: p.image || '',
+          productId: p.id || null,
         },
       ]
     })
@@ -218,6 +221,9 @@ export default function OrderForm({ onClose, onCreated }) {
         name: it.name,
         price: Number(it.price),
         qty: Number(it.qty),
+        // NEW: include image and productId so they are saved to Firestore
+        ...(it.productId ? { productId: it.productId } : {}),
+        ...(it.image !== undefined ? { image: String(it.image || '').trim() } : {}),
       }))
 
       // NEW: payment object (optional)

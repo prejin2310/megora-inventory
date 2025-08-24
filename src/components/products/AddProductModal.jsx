@@ -3,7 +3,7 @@ import Button from '../ui/Button'
 
 const SKU_PREFIX = 'MJ-0'
 
-export default function AddProductModal({ open, onClose, onCreated, createProduct }) {
+export default function AddProductModal({ open, onClose, onCreated, createProduct, products = [] }) {
   const [name, setName] = useState('')
   const [sku, setSku] = useState(SKU_PREFIX)
   const [price, setPrice] = useState('')
@@ -96,7 +96,7 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
         price: Number(price),
         stock: Number(stock),
         minStock: Number(minStock),
-        image: image.trim(),
+        image: image.trim(),            // silently preserved
         category: category.trim(),
         description: description.trim(),
         createdAt: new Date().toISOString(),
@@ -126,6 +126,33 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
           {error && <div className="apm-error">{error}</div>}
 
           <div className="apm-grid">
+            {/* NEW: dropdown to select an existing product and capture its image URL (not rendered elsewhere) */}
+            {products.length > 0 && (
+              <div className="apm-field apm-col-span">
+                <label>Select Existing Product</label>
+                <select
+                  onChange={(e) => {
+                    const prod = products.find(p => p.id === e.target.value)
+                    if (!prod) return
+                    setName(prod.name || '')
+                    setSku(prod.sku || SKU_PREFIX)
+                    setPrice(prod.price != null ? String(prod.price) : '')
+                    // keep stock editable — not taken from product by default
+                    setCategory(prod.category || '')
+                    setDescription(prod.description || '')
+                    setImage(prod.image || '') // IMPORTANT: capture image silently
+                  }}
+                >
+                  <option value="">-- Select a product --</option>
+                  {products.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} {p.sku ? `(${p.sku})` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="apm-field">
               <label>Name</label>
               <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Elegant Gold Ring" required />
@@ -169,6 +196,7 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
               <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Short description" />
             </div>
 
+            {/* Keep the Image URL field to allow manual override; if not needed, remove this block */}
             <div className="apm-field apm-col-span">
               <label>Image URL</label>
               <input
@@ -204,8 +232,8 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
           .apm-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
           .apm-field { display: grid; gap: 4px; }
           .apm-field label { font-size: 12px; color: #6b7280; }
-          .apm-field input, .apm-field textarea { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
-          .apm-field input:focus, .apm-field textarea:focus { border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
+          .apm-field input, .apm-field textarea, .apm-field select { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
+          .apm-field input:focus, .apm-field textarea:focus, .apm-field select:focus { border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
           .apm-col-span { grid-column: 1 / -1; }
           .apm-help { font-size: 12px; color: #9ca3af; }
 
