@@ -2,19 +2,10 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getOrderByPublicId } from '../../firebase/firestore'
 
-// Brand config
 const BRAND_GREEN = '#024F3D'
 const LOGO_URL = 'https://i.ibb.co/5XLbs6Pr/Megora-Gold.png'
 
 // Formatters
-const fmtDateTime = (ts) => {
-  try {
-    const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
-    return d.toLocaleString()
-  } catch {
-    return String(ts || '-')
-  }
-}
 const fmtDate = (ts) => {
   try {
     const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
@@ -27,6 +18,14 @@ const fmtTime = (ts) => {
   try {
     const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
     return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  } catch {
+    return String(ts || '-')
+  }
+}
+const fmtDateTime = (ts) => {
+  try {
+    const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
+    return d.toLocaleString()
   } catch {
     return String(ts || '-')
   }
@@ -106,59 +105,77 @@ export default function PublicOrder() {
   const currentIndexRaw = flow.findIndex(f => f.key === order.status)
   const currentIndex = currentIndexRaw >= 0 ? currentIndexRaw : 0
 
-  // Estimated delivery (admin will set when In Transit)
-  const estDelivery = order?.estimatedDelivery || order?.shipping?.estimatedDelivery || null
+  // Estimated delivery (admin sets when In Transit)
+  const estDelivery = order?.estimatedDelivery || order?.shipping?.estimatedDelivery || ''
 
   return (
     <div className="public-wrap">
-      {/* Brand bar with transparent PNG logo */}
+      {/* Brand bar with larger transparent PNG logo */}
       <header className="public-header" style={{ background: BRAND_GREEN }}>
         <div className="brand">
-          <img className="brand-logo-img" src={LOGO_URL} alt="Megora Jewels" />
+          <img className="brand-logo-img big" src={LOGO_URL} alt="Megora Jewels" />
           <div className="brand-name">Megora Jewels</div>
         </div>
       </header>
 
       <main className="public-main">
-        {/* Estimated delivery (top) */}
-        <section className="card est-box">
-          <div className="est-title">Estimated Delivery</div>
-          <div className="est-date">{estDelivery ? fmtDate(estDelivery) : '—'}</div>
-          <div className="est-note muted">
-            Estimated date will update after the courier picks up the order and progresses to In Transit.
+        {/* Dear Customer first */}
+        <section className="card">
+          <div className="greet">
+            <div className="greet-line">Dear {customerName},</div>
+            <div className="greet-sub">Thank you for your order. Below are your order details and progress.</div>
           </div>
         </section>
 
-        {/* Order details compact */}
+        {/* Order details row */}
         <section className="card">
-          <div className="order-top">
-            <div className="ot-block">
+          <div className="order-row">
+            <div className="or-block">
               <div className="muted">Order</div>
-              <div className="ot-strong">#{order.publicId || order.id}</div>
+              <div className="or-strong">#{order.publicId || order.id}</div>
             </div>
-            <div className="ot-block">
+            <div className="or-block">
               <div className="muted">Status</div>
-              <div className="pill" style={{ color: BRAND_GREEN, borderColor: BRAND_GREEN + '33', background: BRAND_GREEN + '14' }}>
-                {order.status}
-              </div>
+              <div className="pill">{order.status}</div>
             </div>
-            <div className="ot-block">
+            <div className="or-block">
               <div className="muted">Placed</div>
-              <div className="ot-strong">{placedAtDate ? placedAtDate.toLocaleString() : '-'}</div>
+              <div className="or-strong">{placedAtDate ? placedAtDate.toLocaleString() : '-'}</div>
             </div>
           </div>
-          <div className="muted">Dear {customerName}, thank you for your order.</div>
         </section>
 
-        {/* Vertical timeline with date + time */}
+        {/* Refund note when Delivered — includes WhatsApp link here only */}
+        {order.status === 'Delivered' && (
+          <section className="card refund-note">
+            <div className="refund-title">Refund & Return Policy</div>
+            <div className="refund-body">
+              Refund can be initiated through WhatsApp with a valid open-box video and must be claimed within 24 hours of delivery time.
+              {' '}
+              Contact us on{' '}
+              <a href="https://wa.me/917736166728" target="_blank" rel="noopener noreferrer">
+                +91 77361 66728
+              </a>.
+            </div>
+          </section>
+        )}
+
+        {/* Order Progress with Estimated Delivery inside */}
         <section className="card">
-          <h3 className="section-title">Order Progress</h3>
+          <div className="progress-head">
+            <h3 className="section-title">Order Progress</h3>
+          </div>
+
+          <div className="est-inline">
+            <div className="muted">Estimated Delivery</div>
+            <div className="est-inline-date">{estDelivery ? fmtDate(estDelivery) : '—'}</div>
+          </div>
 
           <div className="v-timeline">
             {flow.map((step, idx) => {
               const reached = idx <= currentIndex
               const isCurrent = idx === currentIndex
-              const at = statusTimes[step.key] // could be ISO string or Timestamp
+              const at = statusTimes[step.key]
               const dateStr = at ? fmtDate(at) : '-'
               const timeStr = at ? fmtTime(at) : '-'
               const showCourierInline = step.key === 'In Transit' && reached && (shipping?.courier || shipping?.awb)
@@ -167,12 +184,12 @@ export default function PublicOrder() {
                 <div key={step.key} className={`vt-row ${reached ? 'active' : 'inactive'}`}>
                   {/* Left rail */}
                   <div className="vt-rail">
-                    <div className={`vt-node ${isCurrent ? 'current' : (reached ? 'done' : '')}`} style={{ borderColor: BRAND_GREEN }}>
-                      {isCurrent ? <span className="vt-pulse" style={{ borderColor: BRAND_GREEN }} /> : null}
+                    <div className={`vt-node ${isCurrent ? 'current' : (reached ? 'done' : '')}`}>
+                      {isCurrent ? <span className="vt-pulse" /> : null}
                       <div className="vt-icon">{step.icon}</div>
                     </div>
                     {idx < flow.length - 1 && (
-                      <div className={`vt-line ${idx < currentIndex ? 'filled' : ''}`} style={{ background: idx < currentIndex ? BRAND_GREEN : 'var(--border)' }} />
+                      <div className={`vt-line ${idx < currentIndex ? 'filled' : ''}`} />
                     )}
                   </div>
 
@@ -199,7 +216,7 @@ export default function PublicOrder() {
           </div>
         </section>
 
-        {/* Items only (clean) */}
+        {/* Items */}
         <section className="card">
           <h3 className="section-title">Items</h3>
           <div className="items">
@@ -224,7 +241,7 @@ export default function PublicOrder() {
                 </div>
                 <div className="item-right">
                   <div className="muted">Line total</div>
-                  <div className="ot-strong">{money(Number(it.price) * Number(it.qty))}</div>
+                  <div className="or-strong">{money(Number(it.price) * Number(it.qty))}</div>
                 </div>
               </div>
             ))}
@@ -251,32 +268,21 @@ export default function PublicOrder() {
           </div>
         </section>
 
-        {/* Delivery summary (no extra tracking list) */}
+        {/* Delivery summary */}
         <section className="card">
           <h3 className="section-title">Delivery</h3>
           <div className="grid-two">
             <div className="ship-box">
               <div className="muted">Delivery Agency</div>
-              <div className="ot-strong">{shipping?.courier || '-'}</div>
+              <div className="or-strong">{shipping?.courier || '-'}</div>
               <div className="muted mt4">AWB / Reference</div>
-              <div className="ot-strong">{shipping?.awb || '-'}</div>
+              <div className="or-strong">{shipping?.awb || '-'}</div>
             </div>
             <div />
           </div>
         </section>
-                {/* Refund note when Delivered */}
-        {order.status === 'Delivered' && (
-          <section className="card refund-note">
-            <div className="refund-title">Refund & Return Policy</div>
-            <div className="refund-body">
-              Refund can be initiated through WhatsApp with a valid open-box video and must be claimed within 24 hours of delivery time.
-            </div>
-          </section>
-        )}
 
-        <section className="muted center small">
-          For support, reply to our message or contact support@megorajewels.com
-        </section>
+        
       </main>
     </div>
   )
