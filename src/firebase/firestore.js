@@ -233,3 +233,12 @@ export async function updateProductStock(productId, { setTo = null, add = null }
     throw new Error('Provide either setTo or add')
   }
 }
+
+
+export async function getProductBySku(sku) {
+  const q = query(collection(db, 'products'), where('sku', '==', sku))
+  const snap = await getDocs(q)
+  if (snap.empty) return null
+  const docSnap = snap.docs[0]
+  return { id: docSnap.id, ...docSnap.data() }
+}

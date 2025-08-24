@@ -2,17 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { listOrders } from '../../firebase/firestore'
 
-// Status configuration: color + icon per column
-const STATUS_META = {
-  'Received':         { color: '#0ea5e9', bg: '#eff6ff', icon: '📥' },
-  'Packed':           { color: '#6366f1', bg: '#eef2ff', icon: '📦' },
-  'Waiting for Pickup': { color: '#f59e0b', bg: '#fffbeb', icon: '⏳' },
-  'In Transit':       { color: '#16a34a', bg: '#ecfdf5', icon: '🚚' },
-  'Delivered':        { color: '#10b981', bg: '#ecfdf5', icon: '✅' },
-  'Cancelled':        { color: '#ef4444', bg: '#fef2f2', icon: '✖️' },
-  'Returned':         { color: '#f97316', bg: '#fff7ed', icon: '↩️' },
-}
-
 const COLUMNS = [
   { key: 'Received', title: 'Received' },
   { key: 'Packed', title: 'Packed' },
@@ -23,7 +12,48 @@ const COLUMNS = [
   { key: 'Returned', title: 'Returned' },
 ]
 
-const MAX_PER_COLUMN = 6
+const MAX_PER_COLUMN = 3
+
+// Small neutral inline icons (SVG for crispness, CSS-sized)
+function IconHash() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M5 9h14M5 15h14M9 3L7 21M17 3l-2 18" />
+    </svg>
+  )
+}
+function IconReceipt() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M6 2h12v20l-3-2-3 2-3-2-3 2V2z" />
+      <path d="M8 6h8M8 10h8M8 14h5" />
+    </svg>
+  )
+}
+function IconUser() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </svg>
+  )
+}
+function IconBox() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" />
+      <path d="M3.3 7.3L12 12l8.7-4.7" />
+    </svg>
+  )
+}
+function IconClock() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  )
+}
 
 export default function Kanban({ initialOrders = null }) {
   const nav = useNavigate()
@@ -74,6 +104,7 @@ export default function Kanban({ initialOrders = null }) {
       </div>
 
       {error && <div className="error">{error}</div>}
+
       {loading ? (
         <div className="muted">Loading…</div>
       ) : (
@@ -82,18 +113,12 @@ export default function Kanban({ initialOrders = null }) {
             const full = groups[col.key] || []
             const visible = full.slice(0, MAX_PER_COLUMN)
             const remaining = Math.max(0, full.length - visible.length)
-            const meta = STATUS_META[col.key] || { color: '#475569', bg: '#f8fafc', icon: '•' }
 
             return (
               <div className="kanban-col" key={col.key}>
-                <div className="kanban-col-head" style={{ background: meta.bg, borderBottomColor: meta.bg }}>
-                  <div className="kanban-col-left">
-                    <span className="kanban-col-icon" aria-hidden="true">{meta.icon}</span>
-                    <span className="kanban-col-title" style={{ color: meta.color }}>{col.title}</span>
-                  </div>
-                  <div className="kanban-col-count" style={{ color: meta.color, background: '#fff' }}>
-                    {full.length}
-                  </div>
+                <div className="kanban-col-head">
+                  <div className="kanban-col-title">{col.title}</div>
+                  <div className="kanban-col-count">{full.length}</div>
                 </div>
 
                 <div className="kanban-col-body">
@@ -103,28 +128,48 @@ export default function Kanban({ initialOrders = null }) {
                     visible.map(o => {
                       const total = `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`
                       const when = o.createdAt?.toDate ? o.createdAt.toDate().toLocaleString() : (o.createdAt || '')
+                      const pub = o.publicId || (o.id?.slice(0, 6) ?? '')
+                      const cust = o.customer?.name || o.customerId || '—'
+                      const itemCount = (o.items?.length || 0)
+
                       return (
                         <button
                           key={o.id}
                           type="button"
                           className="kanban-card"
                           onClick={() => openOrder(o)}
-                          title={`Open order #${o.publicId || o.id}`}
+                          title={`Open order #${pub}`}
                         >
+                          {/* Top row: ID + Total */}
                           <div className="kc-row kc-top">
-                            <div className="kc-id">#{o.publicId || (o.id?.slice(0, 6) ?? '')}</div>
-                            <div className="kc-total">{total}</div>
-                          </div>
-
-                          <div className="kc-row kc-mid">
-                            <div className="kc-cust" title={o.customer?.name || o.customerId || '—'}>
-                              {o.customer?.name || o.customerId || '—'}
+                            <div className="kc-chip">
+                              <span className="ico"><IconHash /></span>
+                              <span className="txt">#{pub}</span>
                             </div>
-                            <div className="kc-items">{(o.items?.length || 0)} items</div>
+                            <div className="kc-chip strong">
+                              <span className="ico"><IconReceipt /></span>
+                              <span className="txt">{total}</span>
+                            </div>
                           </div>
 
+                          {/* Middle row: Customer + Items */}
+                          <div className="kc-row kc-mid">
+                            <div className="kc-chip ell">
+                              <span className="ico"><IconUser /></span>
+                              <span className="txt">{cust}</span>
+                            </div>
+                            <div className="kc-chip">
+                              <span className="ico"><IconBox /></span>
+                              <span className="txt">{itemCount} items</span>
+                            </div>
+                          </div>
+
+                          {/* Footer row: Time */}
                           <div className="kc-row kc-foot">
-                            <div className="kc-time-pill">{when}</div>
+                            <div className="kc-time-pill">
+                              <span className="ico"><IconClock /></span>
+                              <span className="txt">{when}</span>
+                            </div>
                           </div>
                         </button>
                       )
@@ -134,12 +179,7 @@ export default function Kanban({ initialOrders = null }) {
 
                 <div className="kanban-col-foot">
                   {remaining > 0 && <div className="kanban-more">{remaining} more…</div>}
-                  <button
-                    type="button"
-                    className="kanban-link"
-                    onClick={() => viewAllForStatus(col.key)}
-                    style={{ color: meta.color }}
-                  >
+                  <button type="button" className="kanban-link" onClick={() => viewAllForStatus(col.key)}>
                     View all
                   </button>
                 </div>
@@ -149,6 +189,7 @@ export default function Kanban({ initialOrders = null }) {
         </div>
       )}
 
+      {/* Minimal, neutral styling with subtle icon alignment */}
       <style>{`
         .kanban-wrap { display: grid; gap: 12px; }
         .kanban-head { display: flex; align-items: center; }
@@ -176,17 +217,20 @@ export default function Kanban({ initialOrders = null }) {
           overflow: hidden;
         }
         .kanban-col-head {
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex; align-items: center; gap: 8px;
           padding: 10px 12px;
-          border-bottom: 1px solid transparent;
+          background: #f9fafb;
+          border-bottom: 1px solid #eef0f2;
         }
-        .kanban-col-left { display: inline-flex; align-items: center; gap: 8px; }
-        .kanban-col-icon { font-size: 16px; }
-        .kanban-col-title { font-weight: 800; letter-spacing: .2px; }
+        .kanban-col-title { font-weight: 700; }
         .kanban-col-count {
-          padding: 2px 10px;
+          margin-left: auto;
+          background: #fff;
+          color: #111827;
+          padding: 2px 8px;
           border-radius: 999px;
-          font-weight: 800;
+          font-weight: 700;
+          font-size: 12px;
           border: 1px solid #e5e7eb;
         }
 
@@ -203,34 +247,38 @@ export default function Kanban({ initialOrders = null }) {
           transition: box-shadow .15s ease, transform .05s ease, border-color .15s ease;
         }
         .kanban-card:hover {
-          box-shadow: 0 8px 22px rgba(2,79,61,0.08);
+          box-shadow: 0 8px 22px rgba(0,0,0,0.06);
           transform: translateY(-1px);
           border-color: #d1d5db;
         }
 
         .kc-row { display: flex; align-items: center; justify-content: space-between; }
-        .kc-top .kc-id { font-weight: 800; font-variant-numeric: tabular-nums; }
-        .kc-top .kc-total { font-weight: 800; color: #065f46; }
-
-        .kc-mid {
-          margin-top: 6px;
-          font-size: 14px;
-          color: #374151;
-        }
-        .kc-cust {
-          max-width: 60%;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-        .kc-items {
-          color: #6b7280;
-          font-size: 12px;
-          font-weight: 700;
-        }
-
+        .kc-top { gap: 8px; }
+        .kc-mid { margin-top: 6px; gap: 8px; }
         .kc-foot { margin-top: 8px; }
+
+        .kc-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px 8px;
+          border: 1px solid #e5e7eb;
+          border-radius: 999px;
+          font-size: 13px;
+          color: #111827;
+          background: #fff;
+          max-width: 100%;
+        }
+        .kc-chip.strong { font-weight: 800; }
+        .kc-chip .ico { display: inline-flex; color: #64748b; }
+        .kc-chip .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .ell { max-width: 60%; }
+
         .kc-time-pill {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
           font-size: 12px;
           color: #475569;
           background: #f1f5f9;
@@ -251,7 +299,7 @@ export default function Kanban({ initialOrders = null }) {
         }
         .kanban-more { color: #6b7280; font-size: 12px; }
         .kanban-link {
-          border: 0; background: transparent; font-weight: 700; cursor: pointer;
+          border: 0; background: transparent; font-weight: 700; cursor: pointer; color: #0ea5e9;
         }
         .kanban-link:hover { text-decoration: underline; }
       `}</style>
