@@ -22,8 +22,9 @@ export default function Dashboard() {
   return (
     <div className="vstack gap">
       <DashboardCards orders={orders} />
+       <LowStockWidget products={products} />
       <Kanban orders={orders} />
-      <LowStockWidget products={products} />
+     
     </div>
   )
 }
