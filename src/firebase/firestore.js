@@ -222,3 +222,14 @@ export async function updateOrderEstimated(orderId, estimatedDate) {
     updatedAt: serverTimestamp(),
   })
 }
+
+export async function updateProductStock(productId, { setTo = null, add = null }) {
+  const ref = doc(db, 'products', productId)
+  if (setTo != null) {
+    await updateDoc(ref, { stock: Number(setTo), updatedAt: serverTimestamp() })
+  } else if (add != null) {
+    await updateDoc(ref, { stock: increment(Number(add)), updatedAt: serverTimestamp() })
+  } else {
+    throw new Error('Provide either setTo or add')
+  }
+}
