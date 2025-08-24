@@ -1,0 +1,95 @@
+:root {
+  --bg: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --primary: #111827;
+  --border: #e5e7eb;
+  --card: #ffffff;
+  --pill: #e5e7eb;
+  --danger: #ef4444;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+
+a { color: var(--text); text-decoration: underline; }
+h1, h2, h3, h4 { margin: 0 0 8px; }
+h2 { font-size: 22px; }
+h3 { font-size: 18px; }
+
+.center { display: grid; place-items: center; min-height: 80vh; }
+.muted { color: var(--muted); }
+.grid { display: grid; gap: 16px; }
+.grid.two { grid-template-columns: 1fr 1fr; }
+.grid.three { grid-template-columns: repeat(3, 1fr); }
+.grid.cards3 { grid-template-columns: repeat(3, 1fr); }
+.vstack { display: flex; flex-direction: column; }
+.hstack { display: flex; align-items: center; gap: 8px; }
+.gap { gap: 16px; }
+.grow { flex: 1; }
+.narrow { max-width: 720px; margin: 0 auto; }
+
+.admin-shell { display: grid; grid-template-rows: 56px 1fr; height: 100vh; }
+.topbar { display: flex; align-items: center; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--card); }
+.brand { font-weight: 600; }
+
+.admin-body { display: grid; grid-template-columns: 220px 1fr; height: calc(100vh - 56px); }
+.sidebar { border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+.sidebar a { text-decoration: none; color: var(--text); padding: 8px 10px; border-radius: 8px; }
+.sidebar a.active { background: #f4f4f5; }
+
+.admin-main { padding: 16px; overflow: auto; }
+.public-main { padding: 24px; max-width: 840px; margin: 0 auto; }
+
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+.card.kpi { text-align: center; }
+.kpi-label { color: var(--muted); font-size: 12px; }
+.kpi-value { font-size: 24px; font-weight: 600; }
+
+.btn { background: var(--primary); color: white; border: none; padding: 10px 14px; border-radius: 10px; cursor: pointer; }
+.btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+.btn-danger { background: var(--danger); }
+.btn-sm { padding: 6px 10px; font-size: 12px; }
+.btn-md { padding: 10px 14px; }
+.btn-lg { padding: 12px 18px; }
+
+.input { display: grid; gap: 6px; }
+.input-label { color: var(--muted); font-size: 12px; }
+input, select, textarea {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  outline: none;
+  background: #fff;
+  width: 100%;
+}
+
+.table table { width: 100%; border-collapse: collapse; }
+.table th, .table td { text-align: left; padding: 10px; border-bottom: 1px solid var(--border); }
+
+.pill { background: var(--pill); border-radius: 999px; padding: 4px 8px; font-size: 12px; }
+.pill.received { background: #eef2ff; }
+.pill.packed { background: #e0f2fe; }
+.pill.waiting-for-pickup { background: #ffedd5; }
+.pill.in-transit { background: #fef9c3; }
+.pill.delivered { background: #dcfce7; }
+.pill.cancelled { background: #fee2e2; }
+.pill.returned { background: #fde68a; }
+
+.kanban { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+.kanban-col { border: 1px solid var(--border); border-radius: 12px; background: #fff; }
+.kanban-col-title { padding: 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+.kanban-col-body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.kanban-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.1); display: grid; place-items: center; }
+.modal { width: 720px; max-width: calc(100% - 24px); background: #fff; border-radius: 12px; border: 1px solid var(--border); }
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.modal-body { padding: 16px; }
+
+.timeline { border-left: 2px solid var(--border); padding-left: 16px; display: flex; flex-direction: column; gap: 8px; }
+.timeline-item { position: relative; }
+.timeline-dot { width: 10px; height: 10px; background: var(--text); border-radius: 50%; position: absolute; left: -21px; top: 5px; }
+
+.error { color: var(--danger); }

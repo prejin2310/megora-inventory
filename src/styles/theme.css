@@ -1,0 +1,4 @@
+@media (max-width: 1024px) {
+  .grid.two { grid-template-columns: 1fr; }
+  .kanban { grid-template-columns: 1fr; }
+}
