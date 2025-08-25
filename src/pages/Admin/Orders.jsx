@@ -169,7 +169,7 @@ export default function Orders() {
           {q && <button className="clear" onClick={() => setQ('')}>×</button>}
         </div>
         <div className="grow" />
-        <Button onClick={() => setShowCreate(true)}>Create</Button>
+        <Button onClick={() => setShowCreate(true)}>Create Order</Button>
         <Button size="sm" onClick={refresh}>Refresh</Button>
       </div>
 
