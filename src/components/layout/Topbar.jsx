@@ -7,12 +7,12 @@ export default function Topbar({ onToggleSidebar }) {
 
   return (
     <header className="topbar">
-      <button className="menu-toggle" onClick={onToggleSidebar} aria-label="Toggle sidebar">☰</button>
+      <span className="menu-toggle" onClick={onToggleSidebar}>☰</span>
       <div className="brand">Megora Orders</div>
       <div className="grow" />
       {user && (
         <div className="topbar-right">
-          <span className="muted">{user.email}</span>
+          <span className="muted">{user.displayName}</span>
           <Button variant="ghost" onClick={logout}>Logout</Button>
         </div>
       )}
