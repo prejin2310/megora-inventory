@@ -1,11 +1,13 @@
-import React from 'react'
+// Topbar.jsx
+import React, { useState } from 'react'
 import { useAuth } from '../../auth/AuthContext'
 import Button from '../ui/Button'
 
-export default function Topbar() {
+export default function Topbar({ onToggleSidebar }) {
   const { user, logout } = useAuth()
   return (
     <header className="topbar">
+      <span className="menu-toggle" onClick={onToggleSidebar}>☰</span>
       <div className="brand">Megora Orders</div>
       <div className="grow" />
       {user && (

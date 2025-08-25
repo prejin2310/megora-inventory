@@ -1,9 +1,10 @@
+// Sidebar.jsx
 import React from 'react'
 import { NavLink } from 'react-router-dom'
 
-export default function Sidebar() {
+export default function Sidebar({ className = '' }) {
   return (
-    <aside className="sidebar">
+    <aside className={className}>
       <NavLink to="/admin">Dashboard</NavLink>
       <NavLink to="/admin/orders">Orders</NavLink>
       <NavLink to="/admin/products">Products</NavLink>

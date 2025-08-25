@@ -1,0 +1,67 @@
+/* admin-responsive.css */
+
+/* Mobile (default small screens < 768px) */
+@media (max-width: 768px) {
+  .admin-body {
+    grid-template-columns: 1fr; /* Sidebar collapses above main */
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 56px; /* below topbar */
+    left: -100%;
+    width: 220px;
+    height: calc(100vh - 56px);
+    background: var(--card);
+    border-right: 1px solid var(--border);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: left 0.3s ease;
+    z-index: 1000;
+  }
+
+  .sidebar.open {
+    left: 0;
+  }
+
+  .admin-main {
+    padding: 12px;
+  }
+
+  .topbar {
+    justify-content: space-between;
+  }
+
+  .topbar .brand {
+    font-size: 16px;
+  }
+
+  /* Optional: hamburger menu */
+  .menu-toggle {
+    display: block;
+    cursor: pointer;
+    font-size: 22px;
+    margin-right: 12px;
+  }
+}
+
+/* Desktop (>= 768px) */
+@media (min-width: 769px) {
+  .sidebar {
+    position: relative;
+    left: 0;
+    height: auto;
+    width: 220px;
+    flex-shrink: 0;
+  }
+
+  .menu-toggle {
+    display: none;
+  }
+
+  .admin-body {
+    grid-template-columns: 220px 1fr;
+  }
+}
