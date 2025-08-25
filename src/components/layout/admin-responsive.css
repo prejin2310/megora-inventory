@@ -1,67 +1,125 @@
-/* admin-responsive.css */
+/* --- Vars & general guards --- */
+:root {
+  --header-h: 56px;
+  --sidebar-w: 220px;
+}
 
-/* Mobile (default small screens < 768px) */
+/* stop any accidental horiz scrolling */
+html, body { width: 100%; max-width: 100%; overflow-x: hidden; }
+#root { min-height: 100%; }
+
+/* when drawer open, prevent background scroll jiggle */
+.no-scroll { overflow: hidden; }
+
+/* Make sure grid/flex children can actually shrink */
+.admin-body, .admin-main, .topbar, .sidebar { min-width: 0; }
+
+/* Sidebar links are full-width tap targets */
+.sidebar a { display: block; }
+
+/* Top-level layout (desktop defaults) */
+.admin-shell {
+  display: grid;
+  grid-template-rows: var(--header-h) 1fr;
+  /* use dynamic viewport height to avoid mobile browser UI issues */
+  min-height: 100dvh;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  position: sticky;
+  top: 0;
+  z-index: 1002;
+}
+.menu-toggle { display: none; } /* shown only on mobile */
+
+.admin-body {
+  display: grid;
+  grid-template-columns: var(--sidebar-w) 1fr;
+  min-width: 0;
+}
+
+.sidebar {
+  position: relative;
+  left: 0;
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  z-index: 1001;
+}
+
+.admin-main {
+  padding: 16px;
+  overflow: auto;  /* desktop: inner scroll OK */
+  min-width: 0;
+}
+
+/* --- Overlay behind sidebar (mobile only) --- */
+.sidebar-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.35);
+  z-index: 999;
+}
+
+/* --- Mobile styles --- */
 @media (max-width: 768px) {
-  .admin-body {
-    grid-template-columns: 1fr; /* Sidebar collapses above main */
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: var(--header-h);
+    font-size: 22px;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    margin-right: 8px;
   }
 
+  /* Remove 2-column grid – let main content take the full width */
+  .admin-body {
+    display: block;
+  }
+
+  /* Off-canvas drawer using transform (no layout shift) */
   .sidebar {
     position: fixed;
-    top: 56px; /* below topbar */
-    left: -100%;
-    width: 220px;
-    height: calc(100vh - 56px);
+    top: var(--header-h);
+    left: 0;
+    width: var(--sidebar-w);
+    height: calc(100dvh - var(--header-h));
     background: var(--card);
     border-right: 1px solid var(--border);
     padding: 16px;
     display: flex;
     flex-direction: column;
     gap: 8px;
-    transition: left 0.3s ease;
-    z-index: 1000;
+    overflow: auto;                 /* own scroll if long */
+    -webkit-overflow-scrolling: touch;
+    transform: translateX(-100%);   /* hidden by default */
+    transition: transform 0.28s ease;
   }
-
   .sidebar.open {
-    left: 0;
+    transform: translateX(0);       /* slide in */
   }
 
+  /* Main content should NOT have an inner scroll on mobile:
+     let the page/body scroll to avoid the “split”/gap */
   .admin-main {
     padding: 12px;
+    overflow: visible;
+    width: 100vw; /* guarantee full-bleed width */
   }
 
-  .topbar {
-    justify-content: space-between;
-  }
-
-  .topbar .brand {
-    font-size: 16px;
-  }
-
-  /* Optional: hamburger menu */
-  .menu-toggle {
-    display: block;
-    cursor: pointer;
-    font-size: 22px;
-    margin-right: 12px;
-  }
+  /* Helpful stacks */
+  .grid.cards3 { grid-template-columns: 1fr !important; }
+  .kanban { grid-template-columns: 1fr !important; }
 }
 
-/* Desktop (>= 768px) */
+/* --- Desktop-only cleanups --- */
 @media (min-width: 769px) {
-  .sidebar {
-    position: relative;
-    left: 0;
-    height: auto;
-    width: 220px;
-    flex-shrink: 0;
-  }
-
-  .menu-toggle {
-    display: none;
-  }
-
-  .admin-body {
-    grid-template-columns: 220px 1fr;
-  }
+  .sidebar-overlay { display: none; }
 }
