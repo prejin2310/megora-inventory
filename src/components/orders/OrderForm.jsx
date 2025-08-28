@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useState, useId } from 'react'
 import {
   listProducts,
   listCustomers,
@@ -6,6 +6,62 @@ import {
   createOrder,
 } from '../../firebase/firestore'
 import Button from '../ui/Button'
+import './OrderForm.css'
+
+/* Premium chevron icon that rotates */
+function Chevron({ open }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      style={{
+        transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
+        transition: 'transform 200ms ease',
+        color: 'currentColor',
+        opacity: 0.7,
+      }}
+    >
+      <path fill="currentColor" d="M7.41 8.58 12 13.17l4.59-4.59L18 10l-6 6-6-6z" />
+    </svg>
+  )
+}
+
+/* Accessible accordion with ARIA wiring and max-height animation */
+function AccordionSection({ title, children, defaultOpen = false, className = '' }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const panelId = useId()
+  const headerId = useId()
+  return (
+    <section className={`accordion-section ${className}`}>
+      <button
+        type="button"
+        className={`accordion-header ${open ? 'is-open' : ''}`}
+        aria-expanded={open}
+        aria-controls={panelId}
+        id={headerId}
+        onClick={() => setOpen(o => !o)}
+      >
+        <h4 className="accordion-title">{title}</h4>
+        <Chevron open={open} />
+      </button>
+      <div
+        id={panelId}
+        role="region"
+        aria-labelledby={headerId}
+        className="accordion-panel"
+        style={{
+          maxHeight: open ? '1000px' : '0px',
+          overflow: 'hidden',
+          transition: 'max-height 250ms ease',
+        }}
+      >
+        <div className="accordion-body">{children}</div>
+      </div>
+    </section>
+  )
+}
 
 export default function OrderForm({ onClose, onCreated }) {
   const [products, setProducts] = useState([])
@@ -17,20 +73,20 @@ export default function OrderForm({ onClose, onCreated }) {
   const [selectedProductId, setSelectedProductId] = useState('')
   const [qty, setQty] = useState(1)
 
-  // cart: [{ sku, name, price, qty, editing?: boolean, _origPrice?: number, image?: string, productId?: string }]
+  // cart: [{ sku, name, price, qty, editing?: boolean, _origPrice?: number, image?: string, productId?: string, key?: string, collapsed?: boolean }]
   const [items, setItems] = useState([])
 
   const [channel, setChannel] = useState('Manual')
   const [notes, setNotes] = useState('')
 
-  // NEW: totals inputs
-  const [shipAmount, setShipAmount] = useState('0') // currency
-  const [discAmount, setDiscAmount] = useState('0') // currency
-  const [discPct, setDiscPct] = useState('')        // percentage, optional
+  // totals inputs
+  const [shipAmount, setShipAmount] = useState('0')
+  const [discAmount, setDiscAmount] = useState('0')
+  const [discPct, setDiscPct] = useState('')
 
-  // NEW: payment inputs
-  const [payMode, setPayMode] = useState('COD')         // UPI, Card, NetBanking, COD, Wallet, Other
-  const [payStatus, setPayStatus] = useState('Pending') // Pending, Paid, Failed, Refunded
+  // payment inputs
+  const [payMode, setPayMode] = useState('COD')
+  const [payStatus, setPayStatus] = useState('Pending')
   const [payTxn, setPayTxn] = useState('')
 
   const [error, setError] = useState('')
@@ -72,84 +128,82 @@ export default function OrderForm({ onClose, onCreated }) {
     }
   }, [filteredProducts, selectedProductId])
 
+  // Add item as separate line (unique key; keep all existing logic)
   const addItem = () => {
     const p = filteredProducts.find(x => x.id === selectedProductId)
     if (!p) return
     const qn = Math.max(1, Number(qty || 1))
-    setItems(prev => {
-      // merge by SKU
-      const idx = prev.findIndex(x => x.sku === p.sku)
-      if (idx >= 0) {
-        const copy = [...prev]
-        copy[idx] = { ...copy[idx], qty: copy[idx].qty + qn }
-        return copy
+    setItems(prev => ([
+      ...prev,
+      {
+        sku: p.sku,
+        name: p.name,
+        price: Number(p.price || 0),
+        qty: qn,
+        _origPrice: Number(p.price || 0),
+        editing: false,
+        image: p.image || '',
+        productId: p.id || null,
+        key: `${p.id}-${Date.now()}`,
+        collapsed: true,
       }
-      return [
-        ...prev,
-        {
-          sku: p.sku,
-          name: p.name,
-          price: Number(p.price || 0),
-          qty: qn,
-          _origPrice: Number(p.price || 0),
-          editing: false,
-          // NEW: capture image and productId silently
-          image: p.image || '',
-          productId: p.id || null,
-        },
-      ]
-    })
+    ]))
     setQty(1)
     setSelectedProductId('')
   }
 
-  const removeItem = (sku) => setItems(prev => prev.filter(x => x.sku !== sku))
+  const removeItem = (key) => setItems(prev => prev.filter(x => x.key !== key))
 
-  const toggleEditPrice = (sku, on) => {
+  const toggleEditPrice = (key, on) => {
     setItems(prev =>
       prev.map(it =>
-        it.sku === sku ? { ...it, editing: on, price: Number(it.price) } : it
+        it.key === key ? { ...it, editing: on, price: Number(it.price) } : it
       )
     )
   }
 
-  const changePrice = (sku, value) => {
+  const changePrice = (key, value) => {
     setItems(prev =>
       prev.map(it =>
-        it.sku === sku ? { ...it, price: value } : it
+        it.key === key ? { ...it, price: value } : it
       )
     )
   }
 
-  const savePrice = (sku) => {
+  const savePrice = (key) => {
     setItems(prev =>
       prev.map(it =>
-        it.sku === sku
+        it.key === key
           ? { ...it, price: Number(it.price || 0), editing: false }
           : it
       )
     )
   }
 
-  const cancelPrice = (sku) => {
+  const cancelPrice = (key) => {
     setItems(prev =>
       prev.map(it =>
-        it.sku === sku ? { ...it, price: Number(it._origPrice || it.price || 0), editing: false } : it
+        it.key === key ? { ...it, price: Number(it._origPrice || it.price || 0), editing: false } : it
       )
     )
   }
 
-  const changeQty = (sku, value) => {
+  const changeQty = (key, value) => {
     const qn = Math.max(1, Number(value || 1))
     setItems(prev =>
-      prev.map(it => (it.sku === sku ? { ...it, qty: qn } : it))
+      prev.map(it => (it.key === key ? { ...it, qty: qn } : it))
+    )
+  }
+
+  const toggleItemCollapsed = (key) => {
+    setItems(prev =>
+      prev.map(it => (it.key === key ? { ...it, collapsed: !it.collapsed } : it))
     )
   }
 
   // Totals math
   const subtotal = items.reduce((s, it) => s + Number(it.price) * Number(it.qty), 0)
 
-  // If amount present, it takes precedence; otherwise compute from % (if any)
   const discAmtNum = useMemo(() => {
     const byAmount = Number(discAmountSafe(discAmount))
     if (byAmount > 0) return byAmount
@@ -221,16 +275,15 @@ export default function OrderForm({ onClose, onCreated }) {
         name: it.name,
         price: Number(it.price),
         qty: Number(it.qty),
-        // NEW: include image and productId so they are saved to Firestore
         ...(it.productId ? { productId: it.productId } : {}),
         ...(it.image !== undefined ? { image: String(it.image || '').trim() } : {}),
       }))
 
-      // NEW: payment object (optional)
+      // payment object
       const payment = {
-        mode: payMode,              // UPI | Card | NetBanking | COD | Wallet | Other
-        status: payStatus,          // Pending | Paid | Failed | Refunded
-        txnId: (payStatus === 'Paid' || payStatus === 'Refunded') ? (payTxn || '').trim() : '', // only if paid/refunded
+        mode: payMode,
+        status: payStatus,
+        txnId: (payStatus === 'Paid' || payStatus === 'Refunded') ? (payTxn || '').trim() : '',
       }
 
       const payload = {
@@ -240,8 +293,7 @@ export default function OrderForm({ onClose, onCreated }) {
         totals,
         channel,
         notes,
-        payment, // NEW
-        // shipping intentionally omitted at creation (added when dispatching)
+        payment,
       }
 
       const { id } = await createOrder(payload)
@@ -256,19 +308,18 @@ export default function OrderForm({ onClose, onCreated }) {
 
   return (
     <div className="modal-backdrop">
-      <div className="modal">
+      <div className="modal order-form">
         <div className="modal-header">
           <h3>Create Order</h3>
-          <button className="btn btn-ghost" onClick={onClose}>×</button>
+          <button className="btn btn-ghost" onClick={onClose} aria-label="Close">×</button>
         </div>
 
         <div className="modal-body">
           {error && <div className="error" style={{ marginBottom: 8 }}>{error}</div>}
 
-          <div className="grid two">
-            {/* Customer */}
-            <div className="card vstack gap">
-              <h4>Customer</h4>
+          {/* Customer */}
+          <AccordionSection title="Customer" defaultOpen className="flat">
+            <div className="vstack">
               <select value={customerId} onChange={e => setCustomerId(e.target.value)}>
                 <option value="">Select existing</option>
                 {customers.map(c => (
@@ -281,185 +332,222 @@ export default function OrderForm({ onClose, onCreated }) {
               <input placeholder="Phone" value={newCustomer.phone} onChange={e => setNewCustomer(s => ({ ...s, phone: e.target.value }))} />
               <textarea placeholder="Address" value={newCustomer.address} onChange={e => setNewCustomer(s => ({ ...s, address: e.target.value }))} />
             </div>
+          </AccordionSection>
 
-            {/* Items */}
-            <div className="card vstack gap">
-              <h4>Items</h4>
+          {/* Items */}
+          <AccordionSection title="Items" defaultOpen className="flat">
+  <div className="vstack items-section">
+    {/* Search */}
+    <input
+      className="fld"
+      placeholder="Search product (name, SKU, category)"
+      value={search}
+      onChange={(e) => setSearch(e.target.value)}
+    />
 
-              <input
-                placeholder="Search product (name, SKU, category)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
+    {/* Quick Add Row (mobile-first stacked) */}
+    <div className="quick-add">
+      <select
+        className="fld product-select"
+        value={selectedProductId}
+        onChange={(e) => setSelectedProductId(e.target.value)}
+        disabled={!filteredProducts.length}
+      >
+        <option value="">
+          {filteredProducts.length ? 'Select product' : 'No products available'}
+        </option>
+        {filteredProducts.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
+          </option>
+        ))}
+      </select>
 
-              <div className="grid two">
-                <select
-                  value={selectedProductId}
-                  onChange={(e) => setSelectedProductId(e.target.value)}
-                  disabled={!filteredProducts.length}
-                >
-                  <option value="">{filteredProducts.length ? 'Select product' : 'No products available'}</option>
-                  {filteredProducts.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
-                    </option>
-                  ))}
-                </select>
+      <input
+        className="fld qty-input"
+        type="number"
+        min="1"
+        inputMode="numeric"
+        pattern="[0-9]*"
+        value={qty}
+        onChange={(e) => setQty(e.target.value)}
+        placeholder="Qty"
+        disabled={!filteredProducts.length}
+      />
 
-                <input
-                  type="number"
-                  min="1"
-                  value={qty}
-                  onChange={(e) => setQty(e.target.value)}
-                  placeholder="Qty"
-                  disabled={!filteredProducts.length}
-                />
-              </div>
+      <Button
+        
+        type="button"
+        onClick={addItem}
+        disabled={!selectedProductId}
+      >
+        Add
+      </Button>
+    </div>
 
-              <div className="hstack" style={{ justifyContent: 'flex-end' }}>
-                <Button type="button" onClick={addItem} disabled={!selectedProductId}>Add Item</Button>
-              </div>
+    {/* Cart items */}
+    {items.length > 0 && (
+      <div className="vstack gap item-list">
+        {items.map(it => (
+          <div key={it.key} className="card item-card">
+            {/* Header: name + total + chevron */}
+            <button
+              type="button"
+              className={`item-head ${!it.collapsed ? 'open' : ''}`}
+              onClick={() => toggleItemCollapsed(it.key)}
+              aria-expanded={!it.collapsed}
+              aria-controls={`item-panel-${it.key}`}
+            >
+              <div className="item-head__name" title={it.name}>{it.name}</div>
+              <div className="item-head__total">₹{(Number(it.price) * Number(it.qty)).toFixed(2)}</div>
+              <Chevron open={!it.collapsed} />
+            </button>
 
-              {items.length > 0 && (
-                <div className="vstack gap">
-                  {items.map(it => (
-                    <div key={it.sku} className="card">
-                      <div className="hstack">
-                        <div style={{ minWidth: 180 }}>{it.name}</div>
-                        <div className="grow" />
-                        {/* Inline qty edit */}
-                        <div className="hstack" style={{ gap: 6 }}>
-                          <span className="muted">Qty</span>
-                          <input
-                            type="number"
-                            min="1"
-                            value={it.qty}
-                            onChange={(e) => changeQty(it.sku, e.target.value)}
-                            style={{ width: 70 }}
-                          />
-                        </div>
-                        {/* Inline price edit */}
-                        {!it.editing ? (
-                          <div className="hstack" style={{ gap: 8 }}>
-                            <div>₹{Number(it.price).toFixed(2)}</div>
-                            <button className="btn btn-sm btn-ghost" type="button" onClick={() => toggleEditPrice(it.sku, true)}>
-                              Edit price
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="hstack" style={{ gap: 6 }}>
-                            <input
-                              type="number"
-                              step="0.01"
-                              value={it.price}
-                              onChange={(e) => changePrice(it.sku, e.target.value)}
-                              style={{ width: 100 }}
-                            />
-                            <button className="btn btn-sm" type="button" onClick={() => savePrice(it.sku)}>Save</button>
-                            <button className="btn btn-sm btn-ghost" type="button" onClick={() => cancelPrice(it.sku)}>Cancel</button>
-                          </div>
-                        )}
-                        {/* Line total */}
-                        <div style={{ width: 110, textAlign: 'right', fontWeight: 600 }}>
-                          ₹{(Number(it.price) * Number(it.qty)).toFixed(2)}
-                        </div>
-                        <button className="btn btn-sm btn-ghost" type="button" onClick={() => removeItem(it.sku)}>Remove</button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* NEW: Totals editor */}
-                  <div className="card vstack gap">
-                    <h4>Totals</h4>
-                    <div className="grid two">
-                      <div className="vstack">
-                        <label className="muted">Shipping charge</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={shipAmount}
-                          onChange={e => setShipAmount(e.target.value)}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="vstack">
-                        <label className="muted">Discount amount</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={discAmount}
-                          onChange={e => setDiscAmount(e.target.value)}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="vstack">
-                        <label className="muted">Discount % (optional)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={discPct}
-                          onChange={e => setDiscPct(e.target.value)}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div className="vstack">
-                        <label className="muted">Subtotal</label>
-                        <div style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</div>
-                      </div>
-                      <div className="vstack">
-                        <label className="muted">Grand Total</label>
-                        <div style={{ fontWeight: 800, fontSize: 16 }}>₹{grandTotal.toFixed(2)}</div>
-                      </div>
-                    </div>
-                    <div className="muted small">
-                      If both discount amount and % are provided, amount is used and % is ignored.
-                    </div>
-                  </div>
-
-                  {/* NEW: Payment details */}
-                  <div className="card vstack gap">
-                    <h4>Payment</h4>
-                    <div className="grid two">
-                      <select value={payMode} onChange={e => setPayMode(e.target.value)}>
-                        <option>COD</option>
-                        <option>UPI</option>
-                        <option>Card</option>
-                        <option>NetBanking</option>
-                        <option>Wallet</option>
-                        <option>Other</option>
-                      </select>
-
-                      <select value={payStatus} onChange={e => setPayStatus(e.target.value)}>
-                        <option>Pending</option>
-                        <option>Paid</option>
-                        <option>Failed</option>
-                        <option>Refunded</option>
-                      </select>
-
-                      <input
-                        placeholder="TXN ID (if paid/refunded)"
-                        value={payTxn}
-                        onChange={e => setPayTxn(e.target.value)}
-                        disabled={!(payStatus === 'Paid' || payStatus === 'Refunded')}
-                      />
-                    </div>
-                    <div className="muted small">
-                      TXN ID is enabled only for Paid/Refunded. For COD, leave status Pending until collected.
-                    </div>
-                  </div>
-
-                  <div className="hstack" style={{ fontWeight: 600 }}>
-                    <div>Total</div>
-                    <div className="grow" />
-                    <div>₹{Number(grandTotal).toFixed(2)}</div>
-                  </div>
+            {/* Details: collapsible on mobile, inline grid on larger */}
+            <div
+              id={`item-panel-${it.key}`}
+              className="item-body"
+              style={{
+                maxHeight: it.collapsed ? '0px' : '500px',
+                overflow: 'hidden',
+                transition: 'max-height 220ms ease',
+              }}
+            >
+              <div className="item-body__grid">
+                <div className="field">
+                  <label className="lbl">Qty</label>
+                  <input
+                    className="fld"
+                    type="number"
+                    min="1"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={it.qty}
+                    onChange={(e) => changeQty(it.key, e.target.value)}
+                  />
                 </div>
-              )}
+
+                {!it.editing ? (
+                  <div className="field">
+                    <label className="lbl">Price</label>
+                    <div className="hstack gap">
+                      <div className="mono">₹{Number(it.price).toFixed(2)}</div>
+                      <button className="btn btn-sm btn-ghost" type="button" onClick={() => toggleEditPrice(it.key, true)}>
+                        Edit
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="field">
+                    <label className="lbl">Edit price</label>
+                    <div className="hstack gap">
+                      <input
+                        className="fld"
+                        type="number"
+                        step="0.01"
+                        inputMode="decimal"
+                        value={it.price}
+                        onChange={(e) => changePrice(it.key, e.target.value)}
+                      />
+                      <button className="btn btn-sm" type="button" onClick={() => savePrice(it.key)}>Save</button>
+                      <button className="btn btn-sm btn-ghost" type="button" onClick={() => cancelPrice(it.key)}>Cancel</button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="field actions">
+                  <button className="btn btn-sm btn-ghost danger" type="button" onClick={() => removeItem(it.key)}>Remove</button>
+                </div>
+              </div>
             </div>
           </div>
+        ))}
+      </div>
+    )}
+  </div>
+</AccordionSection>
 
-          <div className="card vstack gap">
-            <h4>Order Received Channel</h4>
+
+          {/* Totals */}
+          <AccordionSection title="Totals" className="flat">
+            <div className="grid two">
+              <div className="vstack">
+                <label className="muted">Shipping charge</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={shipAmount}
+                  onChange={e => setShipAmount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="vstack">
+                <label className="muted">Discount amount</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={discAmount}
+                  onChange={e => setDiscAmount(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="vstack">
+                <label className="muted">Discount % (optional)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={discPct}
+                  onChange={e => setDiscPct(e.target.value)}
+                  placeholder="0"
+                />
+              </div>
+              <div className="vstack">
+                <label className="muted">Subtotal</label>
+                <div style={{ fontWeight: 700 }}>₹{subtotal.toFixed(2)}</div>
+              </div>
+              <div className="vstack">
+                <label className="muted">Grand Total</label>
+                <div style={{ fontWeight: 800, fontSize: 16 }}>₹{grandTotal.toFixed(2)}</div>
+              </div>
+            </div>
+            <div className="muted small">
+              If both discount amount and % are provided, amount is used and % is ignored.
+            </div>
+          </AccordionSection>
+
+          {/* Payment */}
+          <AccordionSection title="Payment" className="flat">
+            <div className="grid two">
+              <select value={payMode} onChange={e => setPayMode(e.target.value)}>
+                <option>COD</option>
+                <option>UPI</option>
+                <option>Card</option>
+                <option>NetBanking</option>
+                <option>Wallet</option>
+                <option>Other</option>
+              </select>
+
+              <select value={payStatus} onChange={e => setPayStatus(e.target.value)}>
+                <option>Pending</option>
+                <option>Paid</option>
+                <option>Failed</option>
+                <option>Refunded</option>
+              </select>
+
+              <input
+                placeholder="TXN ID (if paid/refunded)"
+                value={payTxn}
+                onChange={e => setPayTxn(e.target.value)}
+                disabled={!(payStatus === 'Paid' || payStatus === 'Refunded')}
+              />
+            </div>
+            <div className="muted small">
+              TXN ID is enabled only for Paid/Refunded. For COD, leave status Pending until collected.
+            </div>
+          </AccordionSection>
+
+          {/* Order Channel */}
+          <AccordionSection title="Order Channel" className="flat">
             <div className="grid two">
               <select value={channel} onChange={e => setChannel(e.target.value)}>
                 <option>Collab/promotion</option>
@@ -469,7 +557,7 @@ export default function OrderForm({ onClose, onCreated }) {
               </select>
               <input placeholder="Notes" value={notes} onChange={e => setNotes(e.target.value)} />
             </div>
-          </div>
+          </AccordionSection>
 
           <div className="muted">
             Note: Shipping details (courier, AWB) are added later when dispatching.
@@ -477,6 +565,11 @@ export default function OrderForm({ onClose, onCreated }) {
         </div>
 
         <div className="modal-footer">
+          <div className="hstack" style={{ fontWeight: 600, width: '100%', padding: '8px 0' }}>
+            <div>Total</div>
+            <div className="grow" />
+            <div>₹{Number(grandTotal).toFixed(2)}</div>
+          </div>
           <Button onClick={save} disabled={saving || !items.length}>Create Order</Button>
         </div>
       </div>

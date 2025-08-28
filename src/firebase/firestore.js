@@ -82,7 +82,7 @@ export async function listProducts() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }))
 }
 
-// CREATE: persists image, minStock, description (and trims strings)
+// CREATE: persists image, minStock, description, address (and trims strings)
 export async function createProduct(data) {
   const payload = {
     sku: String(data?.sku || '').trim(),
@@ -93,13 +93,14 @@ export async function createProduct(data) {
     image: String(data?.image || '').trim(),
     minStock: Number(data?.minStock ?? 5),
     description: String(data?.description || '').trim(),
+    address: String(data?.address || '').trim(), // NEW: store product address if provided
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   }
   return addDoc(collection(db, 'products'), payload)
 }
 
-// UPDATE: allows updating image, minStock, description (only when provided)
+// UPDATE: allows updating image, minStock, description, address (only when provided)
 export async function updateProduct(id, data) {
   const ref = doc(db, 'products', id)
   const payload = {
@@ -111,6 +112,7 @@ export async function updateProduct(id, data) {
     ...(data?.image !== undefined ? { image: String(data.image).trim() } : {}),
     ...(data?.minStock !== undefined ? { minStock: Number(data.minStock) } : {}),
     ...(data?.description !== undefined ? { description: String(data.description).trim() } : {}),
+    ...(data?.address !== undefined ? { address: String(data.address).trim() } : {}), // NEW
     updatedAt: serverTimestamp(),
   }
   return updateDoc(ref, payload)

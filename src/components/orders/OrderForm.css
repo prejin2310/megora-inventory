@@ -1,0 +1,322 @@
+/* Design tokens (tweak to brand) */
+:root {
+  --acc-bg: #ffffff;
+  --acc-bg-header: #fafafa;
+  --acc-border: #e7e7e9;
+  --acc-radius: 12px;
+  --acc-radius-inner: 10px;
+  --acc-pad-y: 12px;
+  --acc-pad-x: 14px;
+  --acc-gap: 12px;
+
+  --acc-text: #111827;        /* title color */
+  --acc-muted: #6b7280;       /* subtitles/help text */
+  --acc-icon: #6b7280;        /* chevron color */
+
+  --acc-shadow-1: 0 1px 2px rgba(0,0,0,0.07);
+  --acc-shadow-2: 0 4px 14px rgba(0,0,0,0.06);
+
+  --acc-focus: 0 0 0 3px rgba(59,130,246,0.25); /* accessible focus ring */
+  --acc-transition: 220ms ease;
+
+  --tap-size: 48px;           /* mobile target size */
+  --font-14: 14px;
+
+  
+}
+
+/* Accordion container */
+.accordion-section {
+  background: var(--acc-bg);
+  border: 1px solid var(--acc-border);
+  border-radius: var(--acc-radius);
+  box-shadow: var(--acc-shadow-1), var(--acc-shadow-2);
+  margin-bottom: var(--acc-gap);
+  overflow: hidden; /* clip animated panel */
+}
+
+/* Header as a button for a11y */
+.accordion-header {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: var(--acc-pad-y) var(--acc-pad-x);
+  background: var(--acc-bg-header);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  line-height: 1.2;
+  min-height: var(--tap-size);
+}
+
+.accordion-header:focus-visible {
+  outline: none;
+  box-shadow: var(--acc-focus);
+}
+
+.accordion-title {
+  margin: 0;
+  font-size: var(--font-14);
+  font-weight: 600;
+  color: var(--acc-text);
+}
+
+/* Optional subtitle style if needed inside header */
+.accordion-subtitle {
+  font-size: 12px;
+  color: var(--acc-muted);
+}
+
+/* Chevron SVG inherits color */
+.accordion-header svg {
+  color: var(--acc-icon);
+  flex: 0 0 auto;
+  transition: transform var(--acc-transition);
+}
+
+/* Expand/collapse content wrapper with smooth height animation */
+.accordion-panel {
+  /* Height animation handled inline via max-height; just ensure smoothness */
+  transition: max-height var(--acc-transition);
+  background: var(--acc-bg);
+}
+
+/* Inner body spacing */
+.accordion-body {
+  padding: calc(var(--acc-pad-y) + 2px) var(--acc-pad-x);
+  border-top: 1px solid var(--acc-border);
+  border-bottom-left-radius: var(--acc-radius-inner);
+  border-bottom-right-radius: var(--acc-radius-inner);
+}
+
+/* Divider utility for content groups */
+.accordion-body .section + .section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--acc-border);
+}
+
+/* Hover and pressed states for subtle premium feel */
+.accordion-header:hover {
+  background: #f5f5f7;
+}
+.accordion-header:active {
+  background: #efeff2;
+}
+
+/* Compact density option */
+.accordion-section.compact .accordion-header {
+  padding: 10px 12px;
+  min-height: 40px;
+}
+.accordion-section.compact .accordion-body {
+  padding: 10px 12px;
+}
+
+/* Flat (borderless) variant if used inside modals on light backgrounds */
+.accordion-section.flat {
+  border: 1px solid transparent;
+  box-shadow: none;
+  background: transparent;
+}
+.accordion-section.flat .accordion-header {
+  background: transparent;
+}
+.accordion-section.flat .accordion-body {
+  border-top: 1px solid var(--acc-border);
+  background: #fff;
+  border-radius: 10px;
+}
+
+/* Light/dark elevation adjustment on stacked lists */
+.accordion-section + .accordion-section {
+  margin-top: 10px;
+}
+
+/* Input and layout helpers used inside bodies */
+.grid.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.vstack { display: flex; flex-direction: column; gap: 10px; }
+.hstack { display: flex; align-items: center; gap: 10px; }
+.grow { flex: 1; }
+
+select, input, textarea {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  height: 44px;
+  font-size: 14px;
+  background: #fff;
+}
+textarea { min-height: 80px; }
+
+/* Mobile responsiveness and bigger touch targets */
+@media (max-width: 768px) {
+  .grid.two {
+    grid-template-columns: 1fr;
+  }
+  .accordion-header {
+    padding: 14px 16px;
+    min-height: var(--tap-size);
+  }
+  select, input, textarea, button {
+    min-height: var(--tap-size);
+  }
+}
+
+/* Optional: chevron rotation state if you toggle a class instead of inline style */
+.accordion-header.is-open svg {
+  transform: rotate(180deg);
+}
+
+/* Optional: subtle inset animation when opening body content */
+@keyframes accordion-fade-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.accordion-body > * {
+  animation: accordion-fade-in 200ms ease;
+}
+
+/* Accessible contrast tweaks for dark backgrounds (if modal darkens page) */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --acc-bg: #121416;
+    --acc-bg-header: #0f1113;
+    --acc-border: #24262a;
+    --acc-text: #e5e7eb;
+    --acc-muted: #9ca3af;
+    --acc-icon: #9ca3af;
+    --acc-shadow-1: 0 1px 2px rgba(0,0,0,0.6);
+    --acc-shadow-2: 0 8px 24px rgba(0,0,0,0.45);
+  }
+  .accordion-header:hover { background: #0c0e10; }
+  .accordion-header:active { background: #0a0c0e; }
+}
+
+
+/* Shared field + labels */
+.fld {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  height: 44px;
+  font-size: 14px;
+  background: #fff;
+}
+.lbl {
+  display: block;
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 6px;
+}
+.mono { font-variant-numeric: tabular-nums; }
+
+/* Items section container */
+.items-section { gap: 12px; }
+
+/* Quick add row: mobile-first stacked, desktop turns into 3 columns */
+.quick-add {
+  display: grid;
+  grid-template-columns: 1fr; /* product select full width */
+  gap: 10px;
+  position: relative;
+}
+.product-select {
+  width: 100%;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  line-height: 1.2;
+}
+.qty-input {
+  max-width: 160px;
+}
+.add-btn {
+  justify-self: end;
+  min-width: 120px;
+}
+
+/* Item list cards */
+.item-card {
+  padding: 0; /* header/body manage padding */
+}
+
+/* Item header: name + total + chevron */
+.item-head {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 20px;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #fafafa;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.item-head__name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.item-head__total {
+  font-weight: 700;
+}
+
+/* Item body */
+.item-body .item-body__grid {
+  display: grid;
+  grid-template-columns: 1fr; /* stack by default (mobile) */
+  gap: 12px;
+  padding: 12px 14px;
+  border-top: 1px solid #e7e7e9;
+}
+
+/* Desktop: inline editing grid */
+@media (min-width: 768px) {
+  .quick-add {
+    grid-template-columns: 1fr 140px 120px; /* select, qty, add */
+    align-items: center;
+  }
+  .qty-input { max-width: initial; }
+  .add-btn { justify-self: stretch; }
+
+  .item-body .item-body__grid {
+    grid-template-columns: 140px 1fr auto; /* qty | price | actions */
+    align-items: end;
+  }
+}
+
+/* Tighten chevron alignment and ensure rotation comes from class or inline style */
+.item-head.open svg {
+  transform: rotate(180deg);
+  transition: transform 200ms ease;
+}
+
+/* Prevent horizontal scroll on small devices */
+.modal, .order-form, .accordion-body, .item-list, .item-card {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Touch targets: ensure adequate size on small screens */
+@media (max-width: 768px) {
+  .fld, .btn, .item-head {
+    min-height: 48px;
+  }
+  .add-btn {
+    position: sticky;
+    bottom: 0;        /* keep add reachable when product list scrolls */
+    z-index: 1;
+  }
+}
+
