@@ -11,7 +11,7 @@ import Button from '../../components/ui/Button'
 
 // Courier mapping
 const COURIERS = [
-  { name: 'DTDC', url: 'https://www.dtdc.in/tracking.asp' },
+  { name: 'DTDC', url: 'https://www.dtdc.in/trace.asp' },
   { name: 'Professional Couriers', url: 'https://www.tpcindia.com/track.aspx' },
   { name: 'Blue Dart', url: 'https://www.bluedart.com/tracking' },
   { name: 'Delhivery', url: 'https://www.delhivery.com/tracking' },
@@ -129,19 +129,28 @@ export default function OrderDetails() {
     setReasonText('')
   }
 
-  const saveShipping = async () => {
-    setSavingShip(true)
-    try {
-      await updateOrderShipping(orderId, ship)
-      await reload()
-      showAlert('success', 'Shipping details saved successfully!')
-    } catch (e) {
-      console.error('Update shipping error:', e)
-      showAlert('error', e.message || 'Failed to save shipping')
-    } finally {
-      setSavingShip(false)
+const saveShipping = async () => {
+  setSavingShip(true)
+  try {
+    // find the courier URL if one is selected
+    const selectedCourier = COURIERS.find(c => c.name === ship.courier)
+
+    const payload = {
+      ...ship,
+      trackingUrl: selectedCourier ? selectedCourier.url : '',
     }
+
+    await updateOrderShipping(orderId, payload)
+    await reload()
+    showAlert('success', 'Shipping details saved successfully!')
+  } catch (e) {
+    console.error('Update shipping error:', e)
+    showAlert('error', e.message || 'Failed to save shipping')
+  } finally {
+    setSavingShip(false)
   }
+}
+
 
   const saveEstimated = async () => {
     try {
