@@ -38,6 +38,11 @@ export async function createCustomer(data) {
   return addDoc(collection(db, 'customers'), payload)
 }
 
+export async function deleteCustomer(id) {
+  if (!id) throw new Error('Missing customer id')
+  await deleteDoc(doc(db, 'customers', id))
+}
+
 export async function updateCustomer(id, data) {
   const ref = doc(db, 'customers', id)
   const payload = {
@@ -50,10 +55,6 @@ export async function updateCustomer(id, data) {
   return updateDoc(ref, payload)
 }
 
-export async function deleteCustomer(id) {
-  const ref = doc(db, 'customers', id)
-  return deleteDoc(ref)
-}
 
 export async function getCustomer(id) {
   const ref = doc(db, 'customers', id)
