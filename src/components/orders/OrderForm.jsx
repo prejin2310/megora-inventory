@@ -124,11 +124,11 @@ export default function OrderForm({ onClose, onCreated }) {
   // Auto-select first filtered product when none selected
   useEffect(() => {
     if (!selectedProductId && filteredProducts.length) {
-      setSelectedProductId(filteredProducts[0].id)
+      setSelectedProductId(filteredProducts.id)
     }
   }, [filteredProducts, selectedProductId])
 
-  // Add item as separate line (unique key; keep all existing logic)
+  // Add item as separate line (unique key; keep logic)
   const addItem = () => {
     const p = filteredProducts.find(x => x.id === selectedProductId)
     if (!p) return
@@ -250,23 +250,34 @@ export default function OrderForm({ onClose, onCreated }) {
       let finalCustomerId = customerId
       let customerSnap = null
 
+      // Single-line address string (required one line)
+      const addressLine = (newCustomer.address || '').trim()
+
       // Create a new customer only if not selecting existing and name is provided
       if (!finalCustomerId && newCustomer.name.trim()) {
         const ref = await createCustomer({
           name: newCustomer.name.trim(),
           email: newCustomer.email.trim(),
           phone: newCustomer.phone.trim(),
-          address: newCustomer.address.trim(),
+          address: addressLine, // store address as plain string on customer
         })
         finalCustomerId = ref.id
         customerSnap = {
           name: newCustomer.name.trim(),
           email: newCustomer.email.trim(),
           phone: newCustomer.phone.trim(),
+          address: addressLine, // snapshot for order as well
         }
       } else if (finalCustomerId) {
         const c = customers.find(c => c.id === finalCustomerId)
-        if (c) customerSnap = { name: c.name, email: c.email, phone: c.phone }
+        if (c) {
+          customerSnap = {
+            name: c.name,
+            email: c.email,
+            phone: c.phone,
+            address: c.address || '',
+          }
+        }
       }
 
       // prepare clean items payload for Firestore
@@ -286,6 +297,9 @@ export default function OrderForm({ onClose, onCreated }) {
         txnId: (payStatus === 'Paid' || payStatus === 'Refunded') ? (payTxn || '').trim() : '',
       }
 
+      // Store the same single-line address on the order
+      const shippingAddress = customerSnap?.address || addressLine
+
       const payload = {
         customerId: finalCustomerId || null,
         customer: customerSnap || null,
@@ -294,6 +308,7 @@ export default function OrderForm({ onClose, onCreated }) {
         channel,
         notes,
         payment,
+        shippingAddress, // string on order
       }
 
       const { id } = await createOrder(payload)
@@ -330,143 +345,142 @@ export default function OrderForm({ onClose, onCreated }) {
               <input placeholder="Name" value={newCustomer.name} onChange={e => setNewCustomer(s => ({ ...s, name: e.target.value }))} />
               <input placeholder="Email" value={newCustomer.email} onChange={e => setNewCustomer(s => ({ ...s, email: e.target.value }))} />
               <input placeholder="Phone" value={newCustomer.phone} onChange={e => setNewCustomer(s => ({ ...s, phone: e.target.value }))} />
-              <textarea placeholder="Address" value={newCustomer.address} onChange={e => setNewCustomer(s => ({ ...s, address: e.target.value }))} />
+              {/* Single-line address input; may keep textarea if desired */}
+              <input
+                placeholder="Address (single line)"
+                value={newCustomer.address}
+                onChange={e => setNewCustomer(s => ({ ...s, address: e.target.value }))}
+              />
             </div>
           </AccordionSection>
 
           {/* Items */}
           <AccordionSection title="Items" defaultOpen className="flat">
-  <div className="vstack items-section">
-    {/* Search */}
-    <input
-      className="fld"
-      placeholder="Search product (name, SKU, category)"
-      value={search}
-      onChange={(e) => setSearch(e.target.value)}
-    />
+            <div className="vstack items-section">
+              {/* Search */}
+              <input
+                className="fld"
+                placeholder="Search product (name, SKU, category)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
 
-    {/* Quick Add Row (mobile-first stacked) */}
-    <div className="quick-add">
-      <select
-        className="fld product-select"
-        value={selectedProductId}
-        onChange={(e) => setSelectedProductId(e.target.value)}
-        disabled={!filteredProducts.length}
-      >
-        <option value="">
-          {filteredProducts.length ? 'Select product' : 'No products available'}
-        </option>
-        {filteredProducts.map((p) => (
-          <option key={p.id} value={p.id}>
-            {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
-          </option>
-        ))}
-      </select>
+              {/* Quick Add Row */}
+              <div className="quick-add">
+                <select
+                  className="fld product-select"
+                  value={selectedProductId}
+                  onChange={(e) => setSelectedProductId(e.target.value)}
+                  disabled={!filteredProducts.length}
+                >
+                  <option value="">
+                    {filteredProducts.length ? 'Select product' : 'No products available'}
+                  </option>
+                  {filteredProducts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
+                    </option>
+                  ))}
+                </select>
 
-      <input
-        className="fld qty-input"
-        type="number"
-        min="1"
-        inputMode="numeric"
-        pattern="[0-9]*"
-        value={qty}
-        onChange={(e) => setQty(e.target.value)}
-        placeholder="Qty"
-        disabled={!filteredProducts.length}
-      />
+                <input
+                  className="fld qty-input"
+                  type="number"
+                  min="1"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  value={qty}
+                  onChange={(e) => setQty(e.target.value)}
+                  placeholder="Qty"
+                  disabled={!filteredProducts.length}
+                />
 
-      <Button
-        
-        type="button"
-        onClick={addItem}
-        disabled={!selectedProductId}
-      >
-        Add
-      </Button>
-    </div>
-
-    {/* Cart items */}
-    {items.length > 0 && (
-      <div className="vstack gap item-list">
-        {items.map(it => (
-          <div key={it.key} className="card item-card">
-            {/* Header: name + total + chevron */}
-            <button
-              type="button"
-              className={`item-head ${!it.collapsed ? 'open' : ''}`}
-              onClick={() => toggleItemCollapsed(it.key)}
-              aria-expanded={!it.collapsed}
-              aria-controls={`item-panel-${it.key}`}
-            >
-              <div className="item-head__name" title={it.name}>{it.name}</div>
-              <div className="item-head__total">₹{(Number(it.price) * Number(it.qty)).toFixed(2)}</div>
-              <Chevron open={!it.collapsed} />
-            </button>
-
-            {/* Details: collapsible on mobile, inline grid on larger */}
-            <div
-              id={`item-panel-${it.key}`}
-              className="item-body"
-              style={{
-                maxHeight: it.collapsed ? '0px' : '500px',
-                overflow: 'hidden',
-                transition: 'max-height 220ms ease',
-              }}
-            >
-              <div className="item-body__grid">
-                <div className="field">
-                  <label className="lbl">Qty</label>
-                  <input
-                    className="fld"
-                    type="number"
-                    min="1"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={it.qty}
-                    onChange={(e) => changeQty(it.key, e.target.value)}
-                  />
-                </div>
-
-                {!it.editing ? (
-                  <div className="field">
-                    <label className="lbl">Price</label>
-                    <div className="hstack gap">
-                      <div className="mono">₹{Number(it.price).toFixed(2)}</div>
-                      <button className="btn btn-sm btn-ghost" type="button" onClick={() => toggleEditPrice(it.key, true)}>
-                        Edit
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="field">
-                    <label className="lbl">Edit price</label>
-                    <div className="hstack gap">
-                      <input
-                        className="fld"
-                        type="number"
-                        step="0.01"
-                        inputMode="decimal"
-                        value={it.price}
-                        onChange={(e) => changePrice(it.key, e.target.value)}
-                      />
-                      <button className="btn btn-sm" type="button" onClick={() => savePrice(it.key)}>Save</button>
-                      <button className="btn btn-sm btn-ghost" type="button" onClick={() => cancelPrice(it.key)}>Cancel</button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="field actions">
-                  <button className="btn btn-sm btn-ghost danger" type="button" onClick={() => removeItem(it.key)}>Remove</button>
-                </div>
+                <Button type="button" onClick={addItem} disabled={!selectedProductId}>
+                  Add
+                </Button>
               </div>
-            </div>
-          </div>
-        ))}
-      </div>
-    )}
-  </div>
-</AccordionSection>
 
+              {/* Cart items */}
+              {items.length > 0 && (
+                <div className="vstack gap item-list">
+                  {items.map(it => (
+                    <div key={it.key} className="card item-card">
+                      {/* Header: name + total + chevron */}
+                      <button
+                        type="button"
+                        className={`item-head ${!it.collapsed ? 'open' : ''}`}
+                        onClick={() => toggleItemCollapsed(it.key)}
+                        aria-expanded={!it.collapsed}
+                        aria-controls={`item-panel-${it.key}`}
+                      >
+                        <div className="item-head__name" title={it.name}>{it.name}</div>
+                        <div className="item-head__total">₹{(Number(it.price) * Number(it.qty)).toFixed(2)}</div>
+                        <Chevron open={!it.collapsed} />
+                      </button>
+
+                      {/* Details */}
+                      <div
+                        id={`item-panel-${it.key}`}
+                        className="item-body"
+                        style={{
+                          maxHeight: it.collapsed ? '0px' : '500px',
+                          overflow: 'hidden',
+                          transition: 'max-height 220ms ease',
+                        }}
+                      >
+                        <div className="item-body__grid">
+                          <div className="field">
+                            <label className="lbl">Qty</label>
+                            <input
+                              className="fld"
+                              type="number"
+                              min="1"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={it.qty}
+                              onChange={(e) => changeQty(it.key, e.target.value)}
+                            />
+                          </div>
+
+                          {!it.editing ? (
+                            <div className="field">
+                              <label className="lbl">Price</label>
+                              <div className="hstack gap">
+                                <div className="mono">₹{Number(it.price).toFixed(2)}</div>
+                                <button className="btn btn-sm btn-ghost" type="button" onClick={() => toggleEditPrice(it.key, true)}>
+                                  Edit
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="field">
+                              <label className="lbl">Edit price</label>
+                              <div className="hstack gap">
+                                <input
+                                  className="fld"
+                                  type="number"
+                                  step="0.01"
+                                  inputMode="decimal"
+                                  value={it.price}
+                                  onChange={(e) => changePrice(it.key, e.target.value)}
+                                />
+                                <button className="btn btn-sm" type="button" onClick={() => savePrice(it.key)}>Save</button>
+                                <button className="btn btn-sm btn-ghost" type="button" onClick={() => cancelPrice(it.key)}>Cancel</button>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="field actions">
+                            <button className="btn btn-sm btn-ghost danger" type="button" onClick={() => removeItem(it.key)}>Remove</button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </AccordionSection>
 
           {/* Totals */}
           <AccordionSection title="Totals" className="flat">
