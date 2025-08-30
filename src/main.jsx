@@ -6,6 +6,7 @@ import './styles/global.css'
 import './styles/theme.css'
 import './styles/modal.css'
 import './styles/public-order.css'
+import "./index.css"; // ← important!
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>

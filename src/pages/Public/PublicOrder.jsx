@@ -1,784 +1,639 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import { useParams } from 'react-router-dom'
-import { getOrderByPublicId } from '../../firebase/firestore'
+import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  CheckCircle2,
+  Package,
+  Truck,
+  MapPin,
+  Calendar,
+  Clock,
+  BadgeCheck,
+  Link as LinkIcon,
+  ExternalLink,
+  Navigation,
+  ShieldCheck,
+  Info,
+  Phone,
+} from "lucide-react";
+import { getOrderByPublicId } from "../../firebase/firestore";
 
-const BRAND_GREEN = '#024F3D'
-const LOGO_URL = 'https://i.ibb.co/hRzSG3r0/webGold.png'
+/**
+ * PublicOrder – Neo Redesign
+ * Modern, mobile-first, animated order tracker page.
+ * - Uses lucide-react icons & framer-motion micro-interactions
+ * - TailwindCSS utility classes for styling
+ * - Preserves *all* original functionality and data logic
+ * - Adds small UX improvements (progress bar, empty states, badges)
+ */
 
-// Formatters
+const BRAND = {
+  green: "#024F3D",
+  gradient: "bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600",
+};
+
+const LOGO_URL = "https://i.ibb.co/hRzSG3r0/webGold.png";
+
+// -------------------- Helpers --------------------
+const toDateObj = (ts) => {
+  try {
+    return ts?.toDate ? ts.toDate() : typeof ts === "string" ? new Date(ts) : new Date(ts);
+  } catch {
+    return null;
+  }
+};
+
 const fmtDate = (ts) => {
+  const d = toDateObj(ts);
   try {
-    const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
-    return d.toLocaleDateString()
+    return d ? d.toLocaleDateString() : "-";
   } catch {
-    return String(ts || '-')
+    return String(ts || "-");
   }
-}
+};
+
 const fmtTime = (ts) => {
+  const d = toDateObj(ts);
   try {
-    const d = ts?.toDate ? ts.toDate() : (typeof ts === 'string' ? new Date(ts) : new Date(ts))
-    return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    return d ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "-";
   } catch {
-    return String(ts || '-')
+    return String(ts || "-");
   }
+};
+
+const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
+
+// Status flow (includes Out for Delivery)
+const FLOW = [
+  { key: "Received", label: "Order Received", icon: Package },
+  { key: "Packed", label: "Item Packed", icon: BoxIcon },
+  { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Navigation },
+  { key: "In Transit", label: "In Transit", icon: Truck },
+  { key: "Out for Delivery", label: "Out for Delivery", icon: Navigation },
+  { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
+];
+
+// Fallback icon (simple cube) when using "BoxIcon" reference
+function BoxIcon(props) {
+  return (
+    <svg
+      {...props}
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={(props?.className || "") + " w-5 h-5"}
+    >
+      <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" />
+      <path d="M3.3 7.3L12 12l8.7-4.7" />
+    </svg>
+  );
 }
-const money = (n) => `₹${Number(n || 0).toFixed(2)}`
 
-// Icons
-const IconCheck = ({ fill = BRAND_GREEN }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" aria-hidden="true">
-    <path d="M20 6L9 17l-5-5" />
-  </svg>
-)
-const IconDot = ({ fill = BRAND_GREEN }) => (
-  <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><circle cx="6" cy="6" r="5" fill={fill} /></svg>
-)
-const IconTruck = ({ fill = BRAND_GREEN }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" aria-hidden="true">
-    <path d="M3 7h11v8H3zM14 10h4l3 3v2h-7z" /><circle cx="7.5" cy="17.5" r="1.5" /><circle cx="17.5" cy="17.5" r="1.5" />
-  </svg>
-)
-const IconBox = ({ fill = BRAND_GREEN }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" aria-hidden="true">
-    <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" /><path d="M3.3 7.3L12 12l8.7-4.7" />
-  </svg>
-)
-// Optional distinct icon for "Out for Delivery"
-const IconOutForDelivery = ({ fill = BRAND_GREEN }) => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" aria-hidden="true">
-    <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
-    <circle cx="12" cy="11" r="2.5" />
-  </svg>
-)
-
-export default function PublicOrder() {
-  const { publicId } = useParams()
-  const [order, setOrder] = useState(null)
-  const [error, setError] = useState('')
+export default function PublicOrderNeo() {
+  const { publicId } = useParams();
+  const [order, setOrder] = useState(null);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      setError('')
+    let mounted = true;
+    (async () => {
       try {
-        const o = await getOrderByPublicId(publicId)
-        if (mounted) setOrder(o)
-        if (!o && mounted) setError('Order not found')
+        setError("");
+        setLoading(true);
+        const o = await getOrderByPublicId(publicId);
+        if (!mounted) return;
+        setOrder(o || null);
+        if (!o) setError("Order not found");
       } catch (e) {
-        console.error('Public order load error:', e)
-        if (mounted) setError(e.message || 'Failed to load order')
+        console.error("Public order load error:", e);
+        if (mounted) setError(e?.message || "Failed to load order");
+      } finally {
+        mounted && setLoading(false);
       }
-    })()
-    return () => { mounted = false }
-  }, [publicId])
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [publicId]);
 
   const placedAtDate = useMemo(() => {
-    if (!order?.createdAt) return null
-    return order.createdAt?.toDate ? order.createdAt.toDate() : new Date(order.createdAt)
-  }, [order])
+    if (!order?.createdAt) return null;
+    return toDateObj(order.createdAt);
+  }, [order]);
 
   const statusTimes = useMemo(() => {
-    const map = {}
-    ;(order?.history || []).forEach(h => {
-      if (!map[h.status]) map[h.status] = h.at
-    })
-    return map
-  }, [order])
+    const map = {};
+    (order?.history || []).forEach((h) => {
+      if (!map[h.status]) map[h.status] = h.at;
+    });
+    return map;
+  }, [order]);
 
-  if (error) return <div className="po-main"><div className="po-error">{error}</div></div>
-  if (!order) return <div className="po-main">Loading…</div>
+  const customerName = order?.customer?.name || "Customer";
+  const orderNumber = order?.publicId || order?.id || "";
+  const shipping = order?.shipping || {};
+  const address = shipping?.address || order?.customer?.address || ""; // may be string in your data
+  const totals = order?.totals || { subtotal: 0, shipping: 0, discount: 0, grandTotal: 0 };
 
-  const customerName = order?.customer?.name || 'Customer'
-  const orderNumber = order?.publicId || order?.id || ''
-  const shipping = order?.shipping || {}
-const address = shipping?.address || order?.customer?.address || ""
-  const totals = order?.totals || { subtotal: 0, shipping: 0, discount: 0, grandTotal: 0 }
+  const flow = FLOW;
+  const currentIndexRaw = flow.findIndex((f) => f.key === order?.status);
+  const currentIndex = currentIndexRaw >= 0 ? currentIndexRaw : 0;
 
-  // Timeline flow with Out for Delivery added
-  const flow = [
-    { key: 'Received', label: 'Order Received', icon: <IconDot /> },
-    { key: 'Packed', label: 'Item Packed', icon: <IconBox /> },
-    { key: 'Waiting for Pickup', label: 'Courier Pickup Initiated', icon: <IconBox /> },
-    { key: 'In Transit', label: 'In Transit', icon: <IconTruck /> },
-    { key: 'Out for Delivery', label: 'Out for Delivery', icon: <IconOutForDelivery /> }, // new
-    { key: 'Delivered', label: 'Delivered', icon: <IconCheck /> },
-  ]
-  const currentIndexRaw = flow.findIndex(f => f.key === order.status)
-  const currentIndex = currentIndexRaw >= 0 ? currentIndexRaw : 0
+  const estDelivery = order?.estimatedDelivery || shipping?.estimatedDelivery || "";
+  const trackingUrl = (shipping?.trackingUrl || "").trim();
+  const canTrack = Boolean(trackingUrl);
 
-  const estDelivery = order?.estimatedDelivery || shipping?.estimatedDelivery || ''
-  const trackingUrl = (shipping?.trackingUrl || '').trim()
-  const canTrack = Boolean(trackingUrl)
-
-  // Return Policy Logic (24h window from Delivered timestamp)
-  let returnExpired = false
-  let returnEndsAt = null
-  if (order.status === 'Delivered' && statusTimes['Delivered']) {
-    const deliveredAt = statusTimes['Delivered']?.toDate ? statusTimes['Delivered'].toDate() : new Date(statusTimes['Delivered'])
-    returnEndsAt = new Date(deliveredAt.getTime() + 24 * 60 * 60 * 1000)
-    returnExpired = new Date() > returnEndsAt
+  // Return policy: 24h from Delivered timestamp
+  let returnExpired = false;
+  let returnEndsAt = null;
+  if (order?.status === "Delivered" && statusTimes["Delivered"]) {
+    const deliveredAt = toDateObj(statusTimes["Delivered"]);
+    if (deliveredAt) {
+      returnEndsAt = new Date(deliveredAt.getTime() + 24 * 60 * 60 * 1000);
+      returnExpired = new Date() > returnEndsAt;
+    }
   }
 
   // WhatsApp link with prefilled message and newlines
-  const returnPhone = '917736166728' // international format without +
-  const prefilledMessage = [
-    '#Return Request',
-    `Order: ${orderNumber}`,
-    `Customer: ${customerName}`,
-    'Reason: '
-  ].join('\n')
-  const waReturnLink = `https://wa.me/${returnPhone}?text=${encodeURIComponent(prefilledMessage)}`
+  const returnPhone = "917736166728"; // international without +
+  const prefilledMessage = ["#Return Request", `Order: ${orderNumber}`, `Customer: ${customerName}`, "Reason: "].join("\n");
+  const waReturnLink = `https://wa.me/${returnPhone}?text=${encodeURIComponent(prefilledMessage)}`;
 
-  // Shipping address lines
-  const addrLines = [
-    address?.name || customerName,
-    [address?.line1, address?.line2].filter(Boolean).join(', '),
-    [address?.city, address?.state, address?.postalCode].filter(Boolean).join(', '),
-    address?.country,
-    address?.phone ? `Phone: ${address.phone}` : ''
-  ].filter(v => v && String(v).trim().length > 0)
+  // Progress percent for bar
+  const progressPct = Math.max(0, Math.min(100, ((currentIndex + 1) / flow.length) * 100));
 
-  return (
-    <div className="po-wrap">
-      {/* HEADER */}
-      <header className="po-header">
-        <div className="po-container po-headbar">
-          {/* LOGO */}
-          <div className="po-logo-side">
-            <img src={LOGO_URL} alt="Megora Jewels" className="po-logo" />
-          </div>
+  // Small helper to render address (string or object)
+  const renderAddress = () => {
+    if (!address) return "-";
+    if (typeof address === "string") return address;
+    const lines = [
+      address?.name || customerName,
+      [address?.line1, address?.line2].filter(Boolean).join(", "),
+      [address?.city, address?.state, address?.postalCode].filter(Boolean).join(", "),
+      address?.country,
+      address?.phone ? `Phone: ${address.phone}` : "",
+    ].filter((v) => v && String(v).trim().length > 0);
+    return lines.join("\n");
+  };
 
-          {/* BRAND INFO */}
-          <div className="po-brand-side">
-            <div className="po-brand-name">Megora Jewels</div>
-            <div className="po-brand-sub">Exclusive online Store — Shop Anytime Anywhere!</div>
-            <div className="po-brand-sub">
-              <a
-                className="po-site"
-                href="https://megorajewels.com"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                [www.megorajewels.com](https://www.megorajewels.com)
-              </a>
+  // -------------- UI Blocks --------------
+const Header = (
+  <div className="bg-brand text-white shadow">
+    <div className="mx-auto w-full max-w-6xl px-4 py-6">
+      {/* Desktop layout */}
+      <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-center md:gap-6">
+        {/* Logo */}
+        <div className="h-16 w-16">
+          <img
+            src={LOGO_URL}
+            alt="Megora Jewels"
+            className="h-full w-full object-contain"
+          />
+        </div>
+
+        {/* Brand text */}
+        <div>
+          <h1 className="font-groillim text-xl font-bold tracking-wide">
+            Megora Jewels
+          </h1>
+          <p className="text-sm text-white/70">
+            Exclusive Online Store — Shop Anytime Anywhere!
+          </p>
+          <a
+  className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
+  href="https://www.megorajewels.com"
+  target="_blank"
+  rel="noreferrer noopener"
+>
+  www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
+</a>
+
+        </div>
+
+        {/* Order summary */}
+        <motion.div
+          initial={{ y: -10, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ type: "spring", stiffness: 260, damping: 20 }}
+          className="justify-self-end w-[260px]"
+        >
+          <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur">
+            <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+              <span className="text-xs text-white/70">Order</span>
+              <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
+            </div>
+            <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+              <span className="text-xs text-white/70">Placed</span>
+              <span className="justify-self-end text-xs">
+                {placedAtDate ? placedAtDate.toLocaleString() : "-"}
+              </span>
+            </div>
+            <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
+              <span className="text-xs text-white/70">Status</span>
+              <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
+                {order?.status || "-"}
+              </span>
             </div>
           </div>
+        </motion.div>
+      </div>
 
-          {/* ORDER CARD */}
-          <div className="po-order-side">
-            <div className="po-order-card">
-              <div className="po-order-card-row">
-                <span className="po-order-label">Order</span>
-                <span className="po-order-value">#{orderNumber}</span>
-              </div>
-              <div className="po-order-card-row">
-                <span className="po-order-label">Placed</span>
-                <span className="po-order-value">
-                  {placedAtDate ? placedAtDate.toLocaleString() : '-'}
-                </span>
-              </div>
-              <div className="po-order-card-row">
-                <span className="po-order-label">Status</span>
-                <span className="po-status-pill">{order.status}</span>
-              </div>
-            </div>
+      {/* Mobile layout */}
+      {/* Mobile layout */}
+<div className="flex flex-col items-center text-center md:hidden">
+  {/* Logo (centered) */}
+  <img
+    src={LOGO_URL}
+    alt="Megora Jewels"
+    className="h-20 w-20 mb-2 object-contain mx-auto"
+  />
+
+  {/* Brand */}
+  <h1 className="font-groillim text-base font-semibold tracking-wide">
+    Megora Jewels
+  </h1>
+  <p className="text-[11px] text-white/70">Exclusive Online Store</p>
+
+  {/* Website link */}
+ <a
+  className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
+  href="https://www.megorajewels.com"
+  target="_blank"
+  rel="noreferrer noopener"
+>
+  www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
+</a>
+
+
+
+  {/* Order summary */}
+  <motion.div
+    initial={{ y: -10, opacity: 0 }}
+    animate={{ y: 0, opacity: 1 }}
+    transition={{ type: "spring", stiffness: 260, damping: 20 }}
+    className="mt-4 w-full max-w-sm"
+  >
+    <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur text-left">
+      <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+        <span className="text-xs text-white/70">Order</span>
+        <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
+      </div>
+      <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+        <span className="text-xs text-white/70">Placed</span>
+        <span className="justify-self-end text-xs">
+          {placedAtDate ? placedAtDate.toLocaleString() : "-"}
+        </span>
+      </div>
+      <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
+        <span className="text-xs text-white/70">Status</span>
+        <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
+          {order?.status || "-"}
+        </span>
+      </div>
+    </div>
+  </motion.div>
+</div>
+
+
+      {/* Progress bar (shared for both) */}
+      <div className="mt-5">
+        <div className="h-1.5 md:h-2 w-full overflow-hidden rounded-full bg-white/30">
+          <motion.div
+            initial={{ width: 0 }}
+            animate={{ width: `${progressPct}%` }}
+            transition={{ duration: 0.7, ease: "easeOut" }}
+            className="h-full rounded-full bg-white"
+          />
+        </div>
+        <div className="mt-1 text-right text-[10px] md:text-xs text-white/80">
+          {Math.round(progressPct)}% complete
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+
+
+  const Loading = (
+    <div className="flex min-h-[60vh] items-center justify-center bg-slate-50 p-6">
+      <motion.div
+        className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg"
+        initial={{ scale: 0.95, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+      >
+        <span className="relative inline-flex h-3 w-3">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
+          <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-600" />
+        </span>
+        <p className="text-sm text-slate-600">Loading order…</p>
+      </motion.div>
+    </div>
+  );
+
+  if (loading) return (
+    <div className="min-h-screen">{Header}{Loading}</div>
+  );
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {Header}
+        <div className="mx-auto w-full max-w-3xl p-4">
+          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm">
+            <div className="flex items-center gap-2"><Info className="h-4 w-4" /><span className="font-semibold">{error}</span></div>
           </div>
         </div>
-      </header>
-
-      {/* MAIN */}
-      <main className="po-main">
-        <div className="po-container po-stack16">
-          {/* Greeting */}
-          <section className="po-card po-greet-card">
-            <div className="po-greet">
-              <div className="po-greet-line">Dear <strong>{customerName}</strong>,</div>
-              <div className="po-muted"><br />Thank you for the order. Below are the order details and progress.</div>
-            </div>
-          </section>
-
-          {/* Delivered: Return Policy replaces progress */}
-          {order.status === 'Delivered' ? (
-            <section className="po-card po-return">
-              <div className="po-progress-head">
-                <h3 className="po-section-title">Return & Refund Policy</h3>
-                {returnEndsAt && !returnExpired && (
-                  <div className="po-est">
-                    <div className="po-muted">Return window ends</div>
-                    <div className="po-strong">{fmtDate(returnEndsAt)} {fmtTime(returnEndsAt)}</div>
-                  </div>
-                )}
-              </div>
-
-              {!returnExpired ? (
-                <div className="po-return-list">
-                  <div className="po-return-item">Return must be requested within <strong>24 hours</strong> of delivery.</div>
-                  <div className="po-return-item">A clear, continuous open-box video recorded at the time of unboxing is required.</div>
-                  <div className="po-return-cta">
-                    <a
-                      href={waReturnLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="po-btn-track"
-                      title="Initiate return on WhatsApp"
-                    >
-                      Request Return on WhatsApp
-                    </a>
-                  </div>
-                </div>
-              ) : (
-                <div className="po-return-ended">
-                  <div className="po-ended-title">Sorry, your return policy period has ended.</div>
-                  <div className="po-ended-help">
-                    Need help? Chat with support on&nbsp;
-                    <a href={waReturnLink} target="_blank" rel="noopener noreferrer" className="po-link">WhatsApp</a>.
-                  </div>
-                </div>
-              )}
-            </section>
-          ) : (
-            <>
-              {/* Order Progress timeline (includes Out for Delivery) */}
-              <section className="po-card">
-                <div className="po-progress-head">
-                  <h3 className="po-section-title">Order Progress</h3>
-                  <div className="po-est">
-                    <div className="po-muted">Estimated Delivery</div>
-                    <div className="po-strong">{estDelivery ? fmtDate(estDelivery) : '—'}</div>
-                  </div>
-                </div>
-
-                <div className="v-timeline">
-                  {flow.map((step, idx) => {
-                    const reached = idx <= currentIndex
-                    const isCurrent = idx === currentIndex
-                    const at = statusTimes[step.key]
-                    const dateStr = at ? fmtDate(at) : '-'
-                    const timeStr = at ? fmtTime(at) : '-'
-                    const showCourierInline = step.key === 'In Transit' && reached && (shipping?.courier || shipping?.awb)
-                    const isLast = idx === flow.length - 1
-
-                    return (
-                      <div key={step.key} className={`vt-row ${reached ? 'active' : 'inactive'} ${isLast ? 'vt-last' : ''}`}>
-                        <div className="vt-rail">
-                          <div className={`vt-node ${isCurrent ? 'current' : (reached ? 'done' : '')}`}>
-                            {isCurrent ? <span className="vt-pulse" /> : null}
-                            <div className="vt-icon">{step.icon}</div>
-                          </div>
-                        </div>
-                        <div className="vt-content">
-                          <div className="vt-head">
-                            <div className="vt-title">{step.label}</div>
-                            <div className="vt-when">
-                              <div className="vt-date">{dateStr}</div>
-                              <div className="vt-time">{timeStr}</div>
-                            </div>
-                          </div>
-
-                          {showCourierInline && (
-                            <div className="vt-inline">
-                              {shipping?.courier && <div><span className="muted">Courier:</span> {shipping.courier}</div>}
-                              {shipping?.awb && <div><span className="muted">AWB:</span> {shipping.awb}</div>}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </section>
-
-              {/* Live tracking (separate section) */}
-              {canTrack && (
-                <section className="po-card po-track">
-                  <div className="po-track-row">
-                    <div className="po-track-info">
-                      <div className="po-muted">Live tracking</div>
-                      <div className="po-track-meta">
-                        {shipping?.courier ? <span>Courier: <strong>{shipping.courier}</strong></span> : null}
-                        {shipping?.awb ? <span> • AWB: <strong>{shipping.awb}</strong></span> : null}
-                      </div>
-                    </div>
-                    <div className="po-grow" />
-                    <a
-                      className="po-btn-track"
-                      href={trackingUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="Open official courier tracking"
-                    >
-                      Track Live Location
-                    </a>
-                  </div>
-                  <div className="po-track-note">
-                    Live location updates can be viewed only on the official courier website.
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-
-          {/* Items */}
-          <section className="po-card">
-            <h3 className="po-section-title">Items</h3>
-            <div className="po-items">
-              {(order.items || []).map((it, i) => (
-                <div key={`${it.sku}-${i}`} className="po-item-card">
-                  <div className="po-item-header">
-                    <div className="po-thumb">
-                      {it.image ? (
-                        <img src={it.image} alt={it.name} />
-                      ) : (
-                        <div className="po-thumb-ph">IMG</div>
-                      )}
-                    </div>
-                    <div className="po-item-info">
-                      <div className="po-item-name" title={it.name}>
-                        {it.name}
-                      </div>
-                      <div className="po-muted po-small mono">{it.sku}</div>
-                    </div>
-                  </div>
-
-                  <div className="po-item-details">
-                    <div className="po-detail">
-                      <div className="po-muted">Qty</div>
-                      <div>{Number(it.qty)}</div>
-                    </div>
-                    <div className="po-detail">
-                      <div className="po-muted">Price</div>
-                      <div>{money(it.price)}</div>
-                    </div>
-                    <div className="po-detail">
-                      <div className="po-muted">Line Total</div>
-                      <div className="po-strong">
-                        {money(Number(it.price) * Number(it.qty))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Totals */}
-            <div className="po-totals">
-              <div className="po-tr">
-                <div>Subtotal</div>
-                <div className="right">{money(totals.subtotal)}</div>
-              </div>
-              <div className="po-tr">
-                <div>Shipping</div>
-                <div className="right">{money(totals.shipping)}</div>
-              </div>
-              <div className="po-tr">
-                <div>Discount</div>
-                <div className="right">-{money(totals.discount)}</div>
-              </div>
-              <div className="po-tr grand">
-                <div>Grand Total</div>
-                <div className="right">{money(totals.grandTotal)}</div>
-              </div>
-            </div>
-          </section>
-
-          {/* Delivery + Customer Address */}
-          <section className="po-card">
-            <h3 className="po-section-title">Delivery</h3>
-            <div className="po-grid2">
-              <div className="po-shipbox">
-                <div className="po-muted">Delivery Agency</div>
-                <div className="po-strong">{shipping?.courier || '-'}</div>
-                <div className="po-muted po-mt4">AWB / Reference</div>
-                <div className="po-strong">{shipping?.awb || '-'}</div>
-                {canTrack && order.status !== 'Delivered' && (
-                  <div className="po-mt8">
-                    <a className="po-link" href={trackingUrl} target="_blank" rel="noopener noreferrer">Open Tracking Page →</a>
-                  </div>
-                )}
-              </div>
-
-              <div className="po-shipbox">
-                <div className="po-muted">Shipping Address</div>
-                <div className="po-strong" style={{ whiteSpace: 'pre-line' }}>
-                 {customerName}
-                 Address: {address}
-                </div>
-              </div>
-            </div>
-          </section>
-        </div>
-      </main>
-
-
-      <style>{`
-        :root {
-          --brand: ${BRAND_GREEN};
-          --bg: #f8fafc;
-          --card: #ffffff;
-          --muted: #6b7280;
-          --ink: #0f172a;
-          --line: #e5e7eb;
-          --pill-bg: #f1f5f9;
-          --pill-ink: #475569;
-        }
-        .po-wrap { min-height: 100vh; background: var(--bg); color: var(--ink); }
-        .po-container { width: min(1100px, 92vw); margin: 0 auto; }
-        .po-stack16 { display: grid; gap: 16px; }
-
-        /* Header */
-/* ---------- Header (restored brand green + responsive) ---------- */
-.po-header {
-  background: var(--brand); /* full-width green bar */
-  color: #fff;
-  padding: 18px 0; /* spacing above/below the inner headbar */
-}
-
-/* Inner headbar (card-like, centered) */
-.po-headbar {
-  width: min(1100px, 92vw);
-  margin: 0 auto;
-  display: grid;
-  grid-template-columns: 120px 1fr auto;
-  gap: 24px;
-  align-items: center;
-  padding: 22px 24px;
-  background: var(--brand); /* keep the green inside the rounded headbar */
-  border-radius: 20px;
-  box-shadow: 0 6px 20px rgba(2,79,61,.15);
-}
-
-/* Logo */
-.po-logo-side { flex-shrink: 0; }
-.po-logo {
-  width: 100%;
-  max-width: 120px;
-  height: auto;
-  object-fit: contain;
-  filter: none;
-}
-
-/* Brand info (ensure readable on green) */
-.po-brand-side { color: #fff; }
-.po-brand-name { color: #ffffff; font-weight: 800; letter-spacing: .3px; font-size: 20px; }
-.po-brand-sub { color: rgba(233,248,243,0.95); font-size: 13px; }
-.po-site { color: #ffffff; text-decoration: none; text-underline-offset: 3px; }
-
-/* Order card (translucent white over green for contrast) */
-.po-order-side { display: grid; justify-items: end; }
-.po-order-card {
-  display: grid;
-  gap: 6px;
-  background: rgba(255,255,255,.12);
-  border: 1px solid rgba(255,255,255,.25);
-  border-radius: 14px;
-  padding: 12px 14px;
-  min-width: 280px;
-  max-width: 360px;
-  color: #fff;
-}
-.po-order-card-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; }
-.po-order-label { color: rgba(231,255,246,0.9); font-size: 12px; }
-.po-order-value { color: #fff; font-weight: 700; text-align: right; }
-.po-status-pill {
-  justify-self: end;
-  display: inline-block;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: rgba(255,255,255,.14);
-  color: #ffffff;
-  border: 1px solid rgba(255,255,255,.28);
-  font-weight: 600;
-  font-size: 12px;
-  text-align: center;
-}
-
-/* ---------- Mobile adjustments ---------- */
-@media (max-width: 720px) {
-  /* Stack everything and center */
-  .po-headbar {
-    grid-template-columns: 1fr;
-    text-align: center;
-    gap: 12px;
-    padding: 16px;
+      </div>
+    );
   }
 
-  .po-logo { max-width: 100px; margin: 0 auto; }
+  if (!order) {
+    return (
+      <div className="min-h-screen bg-slate-50">
+        {Header}
+        <div className="mx-auto w-full max-w-3xl p-4">
+          <div className="rounded-xl border p-4 text-sm text-slate-600 shadow-sm">No order data.</div>
+        </div>
+      </div>
+    );
+  }
 
-  .po-order-side { justify-self: center; width: 100%; }
-  .po-order-card { min-width: 0; width: min(520px, 92vw); justify-self: center; text-align: left; }
+  // Timeline row
+  const Timeline = (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold">Order Progress</h3>
+          <p className="text-xs text-slate-500">Follow your order from warehouse to your door.</p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-slate-500">Estimated Delivery</div>
+          <div className="text-sm font-semibold">{estDelivery ? fmtDate(estDelivery) : "—"}</div>
+        </div>
+      </div>
 
-  /* Make brand lines centered for small screens */
-  .po-brand-side { display: block; }
-  .po-brand-name, .po-brand-sub { text-align: center; }
+      <div className="grid gap-4">
+        {flow.map((step, idx) => {
+          const Icon = step.icon || Package;
+          const reached = idx <= currentIndex;
+          const isCurrent = idx === currentIndex;
+          const at = statusTimes[step.key];
+          const dateStr = at ? fmtDate(at) : "-";
+          const timeStr = at ? fmtTime(at) : "-";
+          const showCourierInline = step.key === "In Transit" && reached && (shipping?.courier || shipping?.awb);
+          return (
+            <motion.div
+              key={step.key}
+              initial={{ x: -6, opacity: 0 }}
+              whileInView={{ x: 0, opacity: 1 }}
+              viewport={{ once: true, margin: "-20%" }}
+              transition={{ type: "spring", stiffness: 200, damping: 20 }}
+              className="relative grid grid-cols-[28px_1fr] items-start gap-3"
+            >
+              {/* Rail */}
+              <div className="relative">
+                <div
+                  className={`relative grid h-7 w-7 place-items-center rounded-full border-2 ${
+                    isCurrent
+                      ? "border-emerald-600 bg-white ring-8 ring-emerald-100"
+                      : reached
+                      ? "border-emerald-500 bg-emerald-50"
+                      : "border-slate-300 bg-white"
+                  }`}
+                >
+                  <Icon className={`h-4 w-4 ${reached ? "text-emerald-600" : "text-slate-400"}`} />
+                </div>
+                {/* Connector */}
+                {idx < flow.length - 1 && (
+                  <div className={`absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 ${reached ? "bg-emerald-200" : "bg-slate-200"}`} />
+                )}
+              </div>
 
-  /* if you want the order card to appear below the brand with spacing */
-  .po-order-card { margin-top: 6px; }
-}
+              {/* Content */}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div className={`truncate text-sm font-semibold ${reached ? "text-emerald-700" : "text-slate-600"}`}>{step.label}</div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>{dateStr}</div>
+                    <div>{timeStr}</div>
+                  </div>
+                </div>
+                {showCourierInline && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700">
+                    {shipping?.courier && (
+                      <div>
+                        <span className="text-slate-500">Courier:</span> <span className="font-medium">{shipping.courier}</span>
+                      </div>
+                    )}
+                    {shipping?.awb && (
+                      <div>
+                        <span className="text-slate-500">AWB:</span> <span className="font-medium">{shipping.awb}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
 
+      {canTrack && (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-slate-700">
+              <div className="text-xs text-slate-500">Live tracking</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {shipping?.courier && (
+                  <span>
+                    Courier: <strong>{shipping.courier}</strong>
+                  </span>
+                )}
+                {shipping?.awb && (
+                  <span>
+                    • AWB: <strong>{shipping.awb}</strong>
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="grow" />
+           <a
+  className="inline-flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:brightness-95"
+  href={trackingUrl}
+  target="_blank"
+  rel="noreferrer noopener"
+  title="Open official courier tracking"
+>
+  <Navigation className="h-4 w-4 text-white" /> Track Live Location
+</a>
 
-        /* Right-side round card */
-        .po-order-side { display: grid; justify-items: end; }
-        .po-order-card {
-          display: grid; gap: 6px;
-          background: rgba(255,255,255,.12);
-          border: 1px solid rgba(255,255,255,.25);
-          border-radius: 14px;
-          padding: 12px 14px;
-          min-width: 280px;
-          max-width: 360px;
-        }
-        @media (max-width: 720px) {
-          .po-order-card { justify-self: center; min-width: 0; width: min(520px, 92vw); }
-        }
-        .po-order-card-row { display: grid; grid-template-columns: 80px 1fr; gap: 8px; align-items: center; }
-        .po-order-label { color: #e7fff6; font-size: 12px; }
-        .po-order-value { color: #fff; font-weight: 700; text-align: right; }
-        .po-status-pill {
-          justify-self: end;
-          display: inline-block;
-          padding: 4px 10px; border-radius: 999px;
-          background: rgba(255,255,255,.14); color: #ffffff; border: 1px solid rgba(255,255,255,.28);
-          font-weight: 600; font-size: 12px; text-align: center;
-        }
-
-        /* Main cards */
-        .po-main { padding: 16px 0 28px; }
-        .po-card {
-          background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px;
-          box-shadow: 0 6px 20px rgba(2,79,61,.05);
-        }
-        .po-greet-card { background: #fff; }
-        .po-section-title { margin: 0 0 6px; font-size: 18px; font-weight: 700; }
-        .po-muted { color: var(--muted); }
-        .po-strong { font-weight: 700; }
-        .po-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 10px 12px; border-radius: 10px; width: min(700px, 90vw); margin: 24px auto; }
-
-        /* Tracking/CTA */
-        .po-track { border: 1px solid rgba(2,79,61,.18); background: #f4fbf9; }
-        .po-track-row { display: flex; align-items: center; gap: 12px; }
-        .po-track-info { display: grid; gap: 4px; }
-        .po-track-meta { color: var(--ink); font-size: 14px; }
-        .po-btn-track {
-          display: inline-flex; align-items: center; justify-content: center;
-          padding: 10px 14px; border-radius: 10px; font-weight: 700; text-decoration: none; white-space: nowrap;
-          background: var(--brand); color: #fff; border: 1px solid var(--brand);
-        }
-        .po-btn-track:hover { filter: brightness(0.96); }
-        .po-grow { flex: 1; }
-
-        /* Progress header */
-        .po-progress-head {
-          display: flex; align-items: center; gap: 10px; justify-content: space-between;
-          border-bottom: 1px dashed var(--line); padding-bottom: 10px; margin-bottom: 10px;
-        }
-        .po-est { display: grid; justify-items: end; }
-
-        /* Vertical Timeline (shorter connector + mobile) */
-        .v-timeline { display: grid; gap: 14px; }
-        .vt-row {
-          position: relative;
-          display: grid;
-          grid-template-columns: 28px 1fr;
-          gap: 12px;
-          align-items: start;
-          min-height: 40px; /* shortened from 44px */
-        }
-        .vt-row::after {
-          content: '';
-          position: absolute;
-          left: 14px;      /* center of 28px rail */
-          top: 24px;       /* shortened from 28px */
-          bottom: -8px;    /* shortened from -14px */
-          width: 2px;
-          background: var(--line);
-          pointer-events: none;
-        }
-        .vt-row.vt-last::after { display: none; }
-        .vt-row.active::after { background: rgba(2,79,61,.45); }
-        .vt-row.inactive::after { background: var(--line); }
-
-        .vt-rail { position: relative; display: grid; justify-items: center; }
-        .vt-node {
-          position: relative;
-          width: 24px; height: 24px;
-          border-radius: 50%;
-          display: grid; place-items: center;
-          border: 2px solid var(--brand);
-          background: #fff;
-          z-index: 1;
-        }
-        .vt-node.current { box-shadow: 0 0 0 6px rgba(2,79,61,.12); }
-
-        .vt-pulse {
-          position: absolute;
-          inset: 50% auto auto 50%;
-          width: 30px; height: 30px;
-          margin-left: -15px; margin-top: -15px;
-          border-radius: 50%;
-          background: rgba(2,79,61,.18);
-          animation: vt-pulse 1.6s infinite ease-in-out;
-        }
-        @keyframes vt-pulse {
-          0% { transform: scale(0.8); opacity: .7; }
-          70% { transform: scale(1.2); opacity: 0; }
-          100% { transform: scale(0.8); opacity: 0; }
-        }
-
-        .vt-content { min-width: 0; display: grid; gap: 6px; }
-        .vt-head { display: grid; grid-template-columns: 1fr auto; align-items: baseline; gap: 10px; }
-        @media (max-width: 560px) { .vt-head { grid-template-columns: 1fr; } }
-        .vt-title { font-weight: 600; }
-        .vt-when { display: grid; text-align: right; gap: 2px; color: var(--muted); font-weight: 400; }
-        .vt-inline { display: flex; gap: 16px; flex-wrap: wrap; color: var(--ink); font-weight: 400; }
-
-        /* Mobile: shorten further */
-        @media (max-width: 560px) {
-          .vt-row { min-height: 34px; }
-          .vt-row::after {
-            top: 20px;    /* shorter start on mobile */
-            bottom: -4px; /* less overlap into next row */
-          }
-          /* Optional: slightly smaller node for tighter mobile look */
-          .vt-node { width: 22px; height: 22px; }
-          .vt-pulse {
-            width: 28px; height: 28px;
-            margin-left: -14px; margin-top: -14px;
-          }
-          .vt-head { gap: 6px; }
-        }
-
-        /* Items */
-        .po-items { display: grid; gap: 10px; }
-        .po-item-row {
-          display: grid;
-          grid-template-columns: 1fr auto auto auto;
-          gap: 12px; align-items: center;
-          border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; background: #fff;
-        }
-        @media (max-width: 720px) {
-          .po-item-row { grid-template-columns: 1fr 1fr; grid-auto-rows: auto; }
-          .po-item-right { justify-self: end; }
-        }
-        .po-item-left { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .po-thumb { width: 56px; height: 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--line); background: #fafafa; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
-        .po-thumb img { width: 100%; height: 100%; object-fit: cover; }
-        .po-item-info { min-width: 0; }
-        .po-item-name { font-weight: 600; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 60vw; }
-        .po-small { font-size: 12px; }
-        .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', monospace; font-size: 12px; }
-        .right { text-align: right; }
-
-        /* Totals */
-        .po-totals { margin-top: 12px; display: grid; gap: 6px; }
-        .po-tr { display: grid; grid-template-columns: 1fr auto; align-items: center; }
-        .po-tr.grand { font-weight: 700; font-size: 16px; }
-
-        /* Delivery */
-        .po-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        @media (max-width: 720px) { .po-grid2 { grid-template-columns: 1fr; } }
-        .po-shipbox { border: 1px dashed var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
-        .po-link { color: var(--brand); font-weight: 700; text-decoration: none; border-bottom: 1px dashed rgba(2,79,61,.35); }
-        .po-link:hover { opacity: .9; }
-        .po-mt4 { margin-top: 4px; }
-        .po-mt8 { margin-top: 8px; }
-
-        /* Return Section */
-        .po-return { border: 1px solid rgba(2,79,61,.18); background: #f9fffc; }
-        .po-return-list { display: grid; gap: 10px; }
-        .po-return-item {
-          background: #ffffff;
-          border: 1px dashed var(--line);
-          padding: 10px 12px;
-          border-radius: 10px;
-        }
-        .po-return-cta { margin-top: 10px; display: flex; justify-content: flex-start; }
-        .po-return-ended { padding: 8px 10px; background: #fff8f8; border: 1px solid #ffd4d4; border-radius: 10px; }
-        .po-ended-title { font-weight: 700; color: #7f1d1d; }
-        .po-ended-help { margin-top: 6px; color: var(--muted); }
-
-        .po-track-note {
-  margin-top: 8px;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* Item card wrapper */
-.po-item-card {
-  border: 1px solid #eee;
-  border-radius: 10px;
-  padding: 12px;
-  margin-bottom: 12px;
-  background: #fff;
-}
-
-/* Item header (image + name) */
-.po-item-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-/* Thumbnail */
-.po-thumb {
-  width: 60px;
-  height: 60px;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #f5f5f5;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.po-thumb img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-/* Item info */
-.po-item-info {
-  flex: 1;
-  min-width: 0;
-}
-.po-item-name {
-  font-weight: 600;
-  font-size: 15px;
-  line-height: 1.3;
-  margin-bottom: 4px;
-  word-break: break-word;
-}
-
-/* Details section (qty/price/line total) */
-.po-item-details {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 12px;
-  margin-top: 10px;
-}
-.po-detail {
-  display: flex;
-  flex-direction: column;
-  font-size: 14px;
-}
-
-/* Totals section */
-.po-totals {
-  margin-top: 16px;
-  border-top: 1px solid #eee;
-  padding-top: 12px;
-}
-.po-tr {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 6px;
-}
-.po-tr.grand {
-  font-weight: 700;
-  font-size: 16px;
-}
-
-
-      `}</style>
+          </div>
+          <div className="mt-2 text-xs text-emerald-800/80">
+            Live location updates can be viewed only on the official courier website.
+          </div>
+        </div>
+      )}
     </div>
-  )
+  );
+
+  const ReturnPolicy = (
+    <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold">Return & Refund Policy</h3>
+          <p className="text-xs text-emerald-800/80">Return must be requested within 24 hours of delivery.</p>
+        </div>
+        {returnEndsAt && !returnExpired && (
+          <div className="text-right">
+            <div className="text-xs text-slate-500">Return window ends</div>
+            <div className="text-sm font-semibold">{fmtDate(returnEndsAt)} {fmtTime(returnEndsAt)}</div>
+          </div>
+        )}
+      </div>
+
+      {!returnExpired ? (
+        <div className="grid gap-2 text-sm">
+          <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-emerald-700" /> A clear, continuous open-box video recorded at the time of unboxing is required.</div>
+          <div className="pt-1">
+            <a
+              href={waReturnLink}
+              target="_blank"
+              rel="noreferrer noopener"
+              className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:bg-emerald-700"
+            >
+              <Phone className="h-4 w-4" /> Request Return on WhatsApp
+            </a>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="font-semibold">Sorry, your return policy period has ended.</div>
+          <div className="mt-1 text-red-900/80">
+            Need help? Chat with support on <a className="underline underline-offset-4" href={waReturnLink} target="_blank" rel="noreferrer noopener">WhatsApp</a>.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const Items = (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <h3 className="mb-2 font-bold">Items</h3>
+      <div className="grid gap-3">
+        {(order.items || []).map((it, i) => (
+          <div key={`${it.sku}-${i}`} className="rounded-xl border p-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="h-16 w-16 overflow-hidden rounded-lg border bg-slate-50">
+                {it.image ? (
+                  <img src={it.image} alt={it.name} className="h-full w-full object-cover" />
+                ) : (
+                  <div className="grid h-full w-full place-items-center text-xs text-slate-400">IMG</div>
+                )}
+              </div>
+              <div className="min-w-0 grow">
+                <div className="truncate text-sm font-semibold" title={it.name}>{it.name}</div>
+                <div className="text-[11px] text-slate-500">{it.sku}</div>
+              </div>
+              <div className="grid grid-cols-3 gap-4 text-right text-sm md:min-w-[280px]">
+                <div>
+                  <div className="text-[11px] text-slate-500">Qty</div>
+                  <div className="font-medium">{Number(it.qty)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Price</div>
+                  <div className="font-medium">{money(it.price)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-500">Line Total</div>
+                  <div className="font-bold">{money(Number(it.price) * Number(it.qty))}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Totals */}
+      <div className="mt-3 border-t pt-3">
+        <div className="mb-1 flex items-center justify-between text-sm"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>
+        <div className="mb-1 flex items-center justify-between text-sm"><span>Shipping</span><span>{money(totals.shipping)}</span></div>
+        <div className="mb-1 flex items-center justify-between text-sm"><span>Discount</span><span className="text-emerald-700">-{money(totals.discount)}</span></div>
+        <div className="mt-1 flex items-center justify-between text-base font-bold"><span>Grand Total</span><span>{money(totals.grandTotal)}</span></div>
+      </div>
+    </div>
+  );
+
+  const Delivery = (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <h3 className="mb-2 font-bold">Delivery</h3>
+      <div className="grid gap-3 md:grid-cols-2">
+        <div className="rounded-xl border border-dashed p-3">
+          <div className="text-xs text-slate-500">Delivery Agency</div>
+          <div className="text-sm font-semibold">{shipping?.courier || "-"}</div>
+          <div className="mt-2 text-xs text-slate-500">AWB / Reference</div>
+          <div className="text-sm font-semibold">{shipping?.awb || "-"}</div>
+          {canTrack && order?.status !== "Delivered" && (
+            <div className="mt-3 text-sm">
+              <a
+                className="inline-flex items-center gap-2 font-semibold text-emerald-700 underline underline-offset-4 hover:text-emerald-800"
+                href={trackingUrl}
+                target="_blank"
+                rel="noreferrer noopener"
+              >
+                <LinkIcon className="h-4 w-4" /> Open Tracking Page
+              </a>
+            </div>
+          )}
+        </div>
+        <div className="rounded-xl border border-dashed p-3">
+          <div className="text-xs text-slate-500">Shipping Address</div>
+          <pre className="whitespace-pre-wrap break-words text-sm font-semibold leading-snug text-slate-800">{renderAddress()}</pre>
+        </div>
+      </div>
+    </div>
+  );
+
+  const Greeting = (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <p className="text-sm text-slate-700">
+        Dear <span className="font-semibold">{customerName}</span>,
+      </p>
+      <p className="mt-1 text-sm text-slate-600">Thank you for your order. Below are the order details and real‑time progress.</p>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {Header}
+
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
+        {order?.status === "Delivered" ? (
+          <>
+            {Greeting}
+            {ReturnPolicy}
+            {Items}
+            {Delivery}
+          </>
+        ) : (
+          <>
+            {Greeting}
+            {Timeline}
+            {Items}
+            {Delivery}
+          </>
+        )}
+      </main>
+
+      {/* Page footer (subtle) */}
+      <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-[11px] text-slate-500">
+        <div className="rounded-xl border bg-white p-2">This page updates automatically as your order progresses.</div>
+      </footer>
+    </div>
+  );
 }
