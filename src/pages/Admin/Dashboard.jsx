@@ -20,11 +20,15 @@ export default function Dashboard() {
   }, [])
 
   return (
-    <div className="vstack gap">
+    <div className="flex flex-col gap-6 p-6 bg-gray-50 min-h-screen">
+      {/* Dashboard summary cards */}
       <DashboardCards orders={orders} />
-       <LowStockWidget products={products} />
+
+      {/* Low stock products */}
+      <LowStockWidget products={products} />
+
+      {/* Orders Kanban board */}
       <Kanban orders={orders} />
-     
     </div>
   )
 }

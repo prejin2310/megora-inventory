@@ -1,94 +1,99 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import Button from '../ui/Button'
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import Button from "../ui/Button";
 
-const SKU_PREFIX = 'MJ-0'
+const SKU_PREFIX = "MJ-0";
 
-export default function AddProductModal({ open, onClose, onCreated, createProduct, products = [] }) {
-  const [name, setName] = useState('')
-  const [sku, setSku] = useState(SKU_PREFIX)
-  const [price, setPrice] = useState('')
-  const [stock, setStock] = useState('')
-  const [minStock, setMinStock] = useState('5')
-  const [image, setImage] = useState('')
-  const [category, setCategory] = useState('')
-  const [description, setDescription] = useState('')
-  const [imgOk, setImgOk] = useState(null) // null=unknown, true=ok, false=bad
-  const [error, setError] = useState('')
-  const [saving, setSaving] = useState(false)
+export default function AddProductModal({
+  open,
+  onClose,
+  onCreated,
+  createProduct,
+  products = [],
+}) {
+  const [name, setName] = useState("");
+  const [sku, setSku] = useState(SKU_PREFIX);
+  const [price, setPrice] = useState("");
+  const [stock, setStock] = useState("");
+  const [minStock, setMinStock] = useState("5");
+  const [image, setImage] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
+  const [imgOk, setImgOk] = useState(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const skuRef = useRef(null)
+  const skuRef = useRef(null);
 
   useEffect(() => {
     if (!open) {
-      setName('')
-      setSku(SKU_PREFIX)
-      setPrice('')
-      setStock('')
-      setMinStock('5')
-      setImage('')
-      setCategory('')
-      setDescription('')
-      setImgOk(null)
-      setError('')
-      setSaving(false)
+      setName("");
+      setSku(SKU_PREFIX);
+      setPrice("");
+      setStock("");
+      setMinStock("5");
+      setImage("");
+      setCategory("");
+      setDescription("");
+      setImgOk(null);
+      setError("");
+      setSaving(false);
     }
-  }, [open])
+  }, [open]);
 
-  // Enforce SKU prefix and allow only suffix editing
   const handleSkuChange = (e) => {
-    const input = e.target
-    let val = input.value || ''
+    const input = e.target;
+    let val = input.value || "";
     if (!val.startsWith(SKU_PREFIX)) {
-      // Force insert prefix
-      val = SKU_PREFIX + val.replace(new RegExp(`^(${SKU_PREFIX})?`), '')
+      val = SKU_PREFIX + val.replace(new RegExp(`^(${SKU_PREFIX})?`), "");
     }
-    // Optionally restrict suffix to alphanumerics and dashes
-    const suffix = val.slice(SKU_PREFIX.length).replace(/[^A-Za-z0-9-]/g, '')
-    const next = SKU_PREFIX + suffix
-    setSku(next)
+    const suffix = val.slice(SKU_PREFIX.length).replace(/[^A-Za-z0-9-]/g, "");
+    const next = SKU_PREFIX + suffix;
+    setSku(next);
 
-    // Maintain caret position after prefix if user tries to place it inside prefix
     requestAnimationFrame(() => {
-      if (!skuRef.current) return
-      const pos = Math.max(SKU_PREFIX.length, input.selectionStart || 0)
-      skuRef.current.setSelectionRange(pos, pos)
-    })
-  }
+      if (!skuRef.current) return;
+      const pos = Math.max(SKU_PREFIX.length, input.selectionStart || 0);
+      skuRef.current.setSelectionRange(pos, pos);
+    });
+  };
 
   const handleSkuFocus = (e) => {
-    // Place caret at end if it lands within prefix
-    const input = e.target
+    const input = e.target;
     requestAnimationFrame(() => {
-      const pos = Math.max(SKU_PREFIX.length, input.selectionStart || 0)
-      input.setSelectionRange(pos, pos)
-    })
-  }
+      const pos = Math.max(SKU_PREFIX.length, input.selectionStart || 0);
+      input.setSelectionRange(pos, pos);
+    });
+  };
 
-  // Validate image URL by trying to load it
   useEffect(() => {
-    if (!image) { setImgOk(null); return }
-    let alive = true
-    const img = new Image()
-    img.onload = () => alive && setImgOk(true)
-    img.onerror = () => alive && setImgOk(false)
-    img.src = image
-    return () => { alive = false }
-  }, [image])
+    if (!image) {
+      setImgOk(null);
+      return;
+    }
+    let alive = true;
+    const img = new Image();
+    img.onload = () => alive && setImgOk(true);
+    img.onerror = () => alive && setImgOk(false);
+    img.src = image;
+    return () => {
+      alive = false;
+    };
+  }, [image]);
 
   const canSave = useMemo(() => {
-    const n = name.trim().length > 0
-    const s = sku.trim().length >= SKU_PREFIX.length // at least prefix
-    const p = !Number.isNaN(Number(price)) && Number(price) >= 0
-    const st = !Number.isNaN(Number(stock)) && Number(stock) >= 0
-    const ms = !Number.isNaN(Number(minStock)) && Number(minStock) >= 0
-    return n && s && p && st && ms && !saving
-  }, [name, sku, price, stock, minStock, saving])
+    const n = name.trim().length > 0;
+    const s = sku.trim().length >= SKU_PREFIX.length;
+    const p = !Number.isNaN(Number(price)) && Number(price) >= 0;
+    const st = !Number.isNaN(Number(stock)) && Number(stock) >= 0;
+    const ms = !Number.isNaN(Number(minStock)) && Number(minStock) >= 0;
+    return n && s && p && st && ms && !saving;
+  }, [name, sku, price, stock, minStock, saving]);
 
   const submit = async (e) => {
-    e?.preventDefault?.()
-    setError('')
-    if (!canSave) return
-    setSaving(true)
+    e?.preventDefault?.();
+    setError("");
+    if (!canSave) return;
+    setSaving(true);
     try {
       const payload = {
         name: name.trim(),
@@ -96,160 +101,221 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
         price: Number(price),
         stock: Number(stock),
         minStock: Number(minStock),
-        image: image.trim(),            // silently preserved
+        image: image.trim(),
         category: category.trim(),
         description: description.trim(),
         createdAt: new Date().toISOString(),
-      }
-      const created = await createProduct(payload)
-      onCreated?.(created)
-      onClose?.()
+      };
+      const created = await createProduct(payload);
+      onCreated?.(created);
+      onClose?.();
     } catch (e2) {
-      console.error('Create product error:', e2)
-      setError(e2.message || 'Failed to create product')
+      console.error("Create product error:", e2);
+      setError(e2.message || "Failed to create product");
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
-  }
+  };
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
-    <div className="apm-backdrop" role="dialog" aria-modal="true">
-      <div className="apm-modal">
-        <div className="apm-head">
-          <div className="apm-title">Add Product</div>
-          <button className="apm-x" onClick={onClose} aria-label="Close">×</button>
+    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4">
+      <div className="w-full max-w-3xl rounded-xl border border-gray-200 bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
+          <h2 className="text-lg font-bold">Add Product</h2>
+          <button
+            onClick={onClose}
+            className="ml-auto h-7 w-7 rounded-md border border-gray-300 bg-slate-100 text-lg leading-none hover:bg-slate-200"
+          >
+            ×
+          </button>
         </div>
 
-        <form className="apm-body" onSubmit={submit}>
-          {error && <div className="apm-error">{error}</div>}
+        {/* Form */}
+        <form onSubmit={submit} className="grid gap-4 p-4">
+          {error && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </div>
+          )}
 
-          <div className="apm-grid">
-            {/* NEW: dropdown to select an existing product and capture its image URL (not rendered elsewhere) */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {products.length > 0 && (
-              <div className="apm-field apm-col-span">
-                <label>Select Existing Product</label>
+              <div className="col-span-full grid gap-1">
+                <label className="text-xs font-medium text-gray-600">
+                  Select Existing Product
+                </label>
                 <select
+                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
                   onChange={(e) => {
-                    const prod = products.find(p => p.id === e.target.value)
-                    if (!prod) return
-                    setName(prod.name || '')
-                    setSku(prod.sku || SKU_PREFIX)
-                    setPrice(prod.price != null ? String(prod.price) : '')
-                    // keep stock editable — not taken from product by default
-                    setCategory(prod.category || '')
-                    setDescription(prod.description || '')
-                    setImage(prod.image || '') // IMPORTANT: capture image silently
+                    const prod = products.find((p) => p.id === e.target.value);
+                    if (!prod) return;
+                    setName(prod.name || "");
+                    setSku(prod.sku || SKU_PREFIX);
+                    setPrice(prod.price != null ? String(prod.price) : "");
+                    setCategory(prod.category || "");
+                    setDescription(prod.description || "");
+                    setImage(prod.image || "");
                   }}
                 >
                   <option value="">-- Select a product --</option>
-                  {products.map(p => (
+                  {products.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} {p.sku ? `(${p.sku})` : ''}
+                      {p.name} {p.sku ? `(${p.sku})` : ""}
                     </option>
                   ))}
                 </select>
               </div>
             )}
 
-            <div className="apm-field">
-              <label>Name</label>
-              <input value={name} onChange={e => setName(e.target.value)} placeholder="e.g., Elegant Gold Ring" required />
+            {/* Fields */}
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">Name</label>
+              <input
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g., Elegant Gold Ring"
+                required
+              />
             </div>
 
-            <div className="apm-field">
-              <label>SKU</label>
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">SKU</label>
               <input
                 ref={skuRef}
                 value={sku}
                 onChange={handleSkuChange}
                 onFocus={handleSkuFocus}
                 placeholder={`${SKU_PREFIX}XXXX`}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
                 required
               />
-              <div className="apm-help">Prefix enforced: {SKU_PREFIX} (only suffix is editable)</div>
+              <p className="text-xs text-gray-400">
+                Prefix enforced: {SKU_PREFIX}
+              </p>
             </div>
 
-            <div className="apm-field">
-              <label>Price</label>
-              <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)} placeholder="e.g., 4999" required />
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">Price</label>
+              <input
+                type="number"
+                step="0.01"
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="e.g., 4999"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+                required
+              />
             </div>
 
-            <div className="apm-field">
-              <label>Total Stock</label>
-              <input type="number" value={stock} onChange={e => setStock(e.target.value)} placeholder="e.g., 10" required />
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                Total Stock
+              </label>
+              <input
+                type="number"
+                value={stock}
+                onChange={(e) => setStock(e.target.value)}
+                placeholder="e.g., 10"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+                required
+              />
             </div>
 
-            <div className="apm-field">
-              <label>Min Stock (For Low stock alert)</label>
-              <input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} placeholder="Default 5" />
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                Min Stock (Low stock alert)
+              </label>
+              <input
+                type="number"
+                value={minStock}
+                onChange={(e) => setMinStock(e.target.value)}
+                placeholder="Default 5"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+              />
             </div>
 
-            <div className="apm-field">
-              <label>Category</label>
-              <input value={category} onChange={e => setCategory(e.target.value)} placeholder="e.g., Rings" />
+            <div className="grid gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                Category
+              </label>
+              <input
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="e.g., Rings"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+              />
             </div>
 
-            <div className="apm-field apm-col-span">
-              <label>Description</label>
-              <textarea rows={3} value={description} onChange={e => setDescription(e.target.value)} placeholder="Short description" />
+            <div className="col-span-full grid gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                Description
+              </label>
+              <textarea
+                rows={3}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Short description"
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+              />
             </div>
 
-            {/* Keep the Image URL field to allow manual override; if not needed, remove this block */}
-            <div className="apm-field apm-col-span">
-              <label>Image URL</label>
+            <div className="col-span-full grid gap-1">
+              <label className="text-xs font-medium text-gray-600">
+                Image URL
+              </label>
               <input
                 value={image}
-                onChange={e => setImage(e.target.value)}
+                onChange={(e) => setImage(e.target.value)}
                 placeholder="https://..."
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
               />
-              <div className="apm-preview">
-                <div className={`apm-status ${imgOk === true ? 'ok' : imgOk === false ? 'bad' : ''}`}>
-                  {imgOk === true ? 'Valid image ✓' : imgOk === false ? 'Invalid URL ✕' : 'Enter an image URL'}
+
+              <div className="mt-2 grid gap-2 md:grid-cols-[1fr_132px]">
+                <div
+                  className={`text-xs ${
+                    imgOk === true
+                      ? "text-green-700"
+                      : imgOk === false
+                      ? "text-red-700"
+                      : "text-gray-500"
+                  }`}
+                >
+                  {imgOk === true
+                    ? "Valid image ✓"
+                    : imgOk === false
+                    ? "Invalid URL ✕"
+                    : "Enter an image URL"}
                 </div>
-                <div className="apm-thumb">
-                  {image ? <img src={image} alt="Preview" /> : <div className="apm-ph">Preview</div>}
+                <div className="flex h-24 w-32 items-center justify-center overflow-hidden rounded-lg border border-gray-300 bg-gray-50">
+                  {image ? (
+                    <img
+                      src={image}
+                      alt="Preview"
+                      className="h-full w-full object-cover"
+                    />
+                  ) : (
+                    <div className="text-xs text-gray-400">Preview</div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
-          <div className="apm-foot">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit" disabled={!canSave}>{saving ? 'Saving…' : 'Create'}</Button>
+          {/* Footer */}
+          <div className="mt-2 flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={!canSave}>
+              {saving ? "Saving…" : "Create"}
+            </Button>
           </div>
         </form>
-
-        <style>{`
-          .apm-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
-          .apm-modal { width: min(760px, 96vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.18); overflow: hidden; }
-          .apm-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid #eef0f2; }
-          .apm-title { font-weight: 800; }
-          .apm-x { margin-left: auto; width: 28px; height: 28px; border: 1px solid #e2e8f0; background: #f1f5f9; border-radius: 8px; cursor: pointer; }
-
-          .apm-body { padding: 12px; display: grid; gap: 12px; }
-          .apm-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
-          .apm-field { display: grid; gap: 4px; }
-          .apm-field label { font-size: 12px; color: #6b7280; }
-          .apm-field input, .apm-field textarea, .apm-field select { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
-          .apm-field input:focus, .apm-field textarea:focus, .apm-field select:focus { border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
-          .apm-col-span { grid-column: 1 / -1; }
-          .apm-help { font-size: 12px; color: #9ca3af; }
-
-          .apm-preview { display: grid; gap: 8px; grid-template-columns: 1fr 132px; align-items: start; }
-          .apm-status { font-size: 12px; color: #6b7280; }
-          .apm-status.ok { color: #065f46; }
-          .apm-status.bad { color: #991b1b; }
-          .apm-thumb { width: 132px; height: 88px; border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; background: #fafafa; display: grid; place-items: center; }
-          .apm-thumb img { width: 100%; height: 100%; object-fit: cover; }
-          .apm-ph { color: #9ca3af; font-size: 12px; }
-
-          .apm-foot { display: flex; justify-content: flex-end; gap: 8px; padding-top: 4px; }
-          @media (max-width: 720px) { .apm-grid { grid-template-columns: 1fr; } .apm-preview { grid-template-columns: 1fr; } }
-          .apm-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; padding: 10px 12px; border-radius: 10px; }
-        `}</style>
       </div>
     </div>
-  )
+  );
 }

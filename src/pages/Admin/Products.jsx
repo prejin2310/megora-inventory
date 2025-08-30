@@ -2,16 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/ui/Button'
 import AddProductModal from '../../components/products/AddProductModal'
 import {
-  // keep existing API, but we’ll use a realtime listener for auto updates
   listProducts,
   createProduct,
   updateProduct,
   deleteProduct,
 } from '../../firebase/firestore'
-import './AddProductModal.css';
-import './Products.css'
 
-// Pagination helper
 const PAGE_SIZE = 10
 
 export default function Products() {
@@ -23,370 +19,256 @@ export default function Products() {
   const [page, setPage] = useState(1)
   const [searchTerm, setSearchTerm] = useState('')
 
-  // ---- Realtime listener (Option A) ----
-  // Expects a helper exported from firebase/firestore that returns an unsubscribe
-  // If not available, see inline fallback using listProducts()
   useEffect(() => {
-    let unsub = null
-    async function attach() {
-      try {
-        // Prefer a dedicated subscribeProducts helper if present
-        if (typeof window !== 'undefined' && typeof subscribeProducts === 'function') {
-          setLoading(true)
-          unsub = subscribeProducts((docs) => {
-            setAll(docs || [])
-            setLoading(false)
-          })
-        } else if (typeof getProductsOnSnapshot === 'function') {
-          setLoading(true)
-          unsub = getProductsOnSnapshot((docs) => {
-            setAll(docs || [])
-            setLoading(false)
-          })
-        } else {
-          // Fallback to one-time load (no realtime)
-          setLoading(true)
-          const list = await listProducts()
-          setAll(list)
-          setLoading(false)
-        }
-      } catch (e) {
-        console.error('Failed to attach product listener', e)
-        // Fallback to one-time load on error
-        const list = await listProducts()
-        setAll(list)
-        setLoading(false)
-      }
+    async function load() {
+      setLoading(true)
+      const list = await listProducts()
+      setAll(list)
+      setLoading(false)
     }
-    attach()
-    return () => {
-      if (typeof unsub === 'function') unsub()
-    }
+    load()
   }, [])
 
-  // ---- One-time loader kept for explicit refresh use (Option B) ----
-  async function load() {
+  async function refresh() {
     setLoading(true)
     const list = await listProducts()
     setAll(list)
     setLoading(false)
   }
 
-  // Fix: define refresh to avoid undefined reference
-  const refresh = () => {
-    // If using realtime, the list updates automatically; still safe to call load()
-    // Call load() only if not on realtime (or if needing a forced resync)
-    // Here we call load() to be explicit; no harm if listener is also active.
-    load()
-  }
-
   async function onAdd(p) {
     await createProduct(p)
     setOpenAdd(false)
-    // With realtime, state updates automatically; still ensure a refresh fallback
     refresh()
   }
 
   async function onEditSave(p) {
     await updateProduct(p.id, p)
     setEdit({ open: false, product: null })
-    // Realtime will push the update; fallback refresh for non-realtime
     refresh()
   }
 
   async function onDelete(id) {
     await deleteProduct(id)
-    // Realtime will remove it; fallback refresh for non-realtime
     refresh()
   }
 
-  // Search filtering
+  // search + pagination
   const term = searchTerm.trim().toLowerCase()
   const filtered = useMemo(() => {
     if (!term) return all
-    return all.filter((p) => {
-      const name = (p.name || '').toLowerCase()
-      const sku = (p.sku || '').toLowerCase()
-      return name.includes(term) || sku.includes(term)
-    })
+    return all.filter(p =>
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.sku || '').toLowerCase().includes(term)
+    )
   }, [all, term])
 
-  // Reset to page 1 when search changes
-  useEffect(() => {
-    setPage(1)
-  }, [term])
+  useEffect(() => { setPage(1) }, [term])
 
-  // Paginate filtered
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   return (
-    <div className="table-scroll-wrap">
-      <div className="p-4">
-        <div className="flex justify-between items-center mb-4">
-          <h1 className="text-xl font-semibold">Products</h1>
-          <Button onClick={() => setOpenAdd(true)}>+ Add Product</Button>
-        </div>
+    <div className="p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-4">
+        <h1 className="text-2xl font-bold text-gray-800">Products</h1>
+        <Button onClick={() => setOpenAdd(true)}>+ Add Product</Button>
+      </div>
 
-        {/* Search */}
-        <div className="products-search mb-4">
-          <input
-            className="products-search-input"
-            type="text"
-            placeholder="Search by name or SKU"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-          {/* Optional explicit refresh button for non-realtime environments */}
-          <Button size="sm" variant="ghost" onClick={refresh}>Refresh</Button>
-        </div>
+      {/* Search */}
+      <div className="flex flex-col sm:flex-row items-center gap-3 mb-6">
+        <input
+          type="text"
+          placeholder="Search by name or SKU"
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="w-full sm:w-64 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+        />
+        <Button size="sm" variant="ghost" onClick={refresh}>Refresh</Button>
+      </div>
 
-        {loading ? (
-          <p>Loading...</p>
-        ) : filtered.length === 0 ? (
-          <p>No products found</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="products-table hidden md:table">
-              <thead>
-                <tr>
-                  <th>Image</th>
-                  <th>Name</th>
-                  <th>SKU</th>
-                  <th>Category</th>
-                  <th>Price</th>
-                  <th>Stock</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paged.map((p) => (
-                  <tr key={p.id}>
-                    <td data-label="Image">
-                      {p.image ? (
-                        <img
-                          src={p.image}
-                          alt={p.name}
-                          className="h-12 w-12 object-cover rounded md:h-12 md:w-12"
-                        />
-                      ) : (
-                        <span className="text-gray-400 italic">No image</span>
-                      )}
-                    </td>
-                    <td data-label="Name">{p.name}</td>
-                    <td data-label="SKU">{p.sku}</td>
-                    <td data-label="Category">{p.category}</td>
-                    <td data-label="Price">₹{p.price}</td>
-                    <td data-label="Stock">{p.stock}</td>
-                    <td data-label="Actions" className="actions">
-                      <button
-                        className="edit"
-                        onClick={() => setEdit({ open: true, product: p })}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="delete"
-                        onClick={() =>
-                          setConfirm({ open: true, id: p.id, name: p.name })
-                        }
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            {/* Mobile accordion view */}
-            <div className="mobile-cards md:hidden">
+      {loading ? (
+        <p className="text-gray-500">Loading...</p>
+      ) : filtered.length === 0 ? (
+        <p className="text-gray-500">No products found</p>
+      ) : (
+        <div className="overflow-x-auto">
+          {/* Desktop Table */}
+          <table className="hidden md:table w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-gray-100 text-sm text-gray-600">
+                <th className="px-4 py-2">Image</th>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">SKU</th>
+                <th className="px-4 py-2">Category</th>
+                <th className="px-4 py-2">Price</th>
+                <th className="px-4 py-2">Stock</th>
+                <th className="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
               {paged.map(p => (
-                <div key={p.id} className="prod-card">
-                  <div className="prod-card-head">
-                    <div>
-                      <div className="pch-name">{p.name || '-'}</div>
-                      <div className="pch-cat">{p.category || '—'}</div>
-                    </div>
-                    <div className="pch-price">₹{Number(p.price || 0).toFixed(2)}</div>
-                  </div>
-
-                  <div className="prod-media">
-                    <div className="pm-thumb">
-                      {p.image ? <img src={p.image} alt={p.name} /> : <div>No IMG</div>}
-                    </div>
-                    <div className="pm-info">
-                      <div className="pm-sku">{p.sku || '-'}</div>
-                    </div>
-                  </div>
-
-                  <div className="prod-meta">
-                    <div className="pm-item">
-                      <div className="pm-lab">Stock</div>
-                      <div className="pm-val">{Number(p.stock || 0)}</div>
-                    </div>
-                    <div className="pm-item">
-                      <div className="pm-lab">Min</div>
-                      <div className="pm-val">{Number(p.minStock ?? 5)}</div>
-                    </div>
-                    <div className="pm-item">
-                      <div className="pm-lab">SKU</div>
-                      <div className="pm-val" title={p.sku}>{p.sku || '-'}</div>
-                    </div>
-                  </div>
-
-                  <div className="prod-actions">
+                <tr key={p.id} className="border-t text-sm">
+                  <td className="px-4 py-2">
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="h-12 w-12 object-cover rounded" />
+                    ) : (
+                      <span className="text-gray-400 italic">No image</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2">{p.name}</td>
+                  <td className="px-4 py-2">{p.sku}</td>
+                  <td className="px-4 py-2">{p.category}</td>
+                  <td className="px-4 py-2">₹{p.price}</td>
+                  <td className="px-4 py-2">{p.stock}</td>
+                  <td className="px-4 py-2 flex gap-2">
                     <Button size="sm" onClick={() => setEdit({ open: true, product: p })}>Edit</Button>
                     <Button
                       size="sm"
                       variant="danger"
-                      className="danger"
                       onClick={() => setConfirm({ open: true, id: p.id, name: p.name })}
                     >
                       Delete
                     </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+
+          {/* Mobile Cards */}
+          <div className="grid gap-4 md:hidden">
+            {paged.map(p => (
+              <div key={p.id} className="bg-white p-4 rounded-lg shadow">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <h3 className="font-semibold">{p.name || '-'}</h3>
+                    <p className="text-xs text-gray-500">{p.category || '—'}</p>
+                  </div>
+                  <div className="text-sm font-bold">₹{Number(p.price || 0).toFixed(2)}</div>
+                </div>
+                <div className="flex gap-3 mb-3">
+                  <div className="h-16 w-16 bg-gray-100 flex items-center justify-center overflow-hidden rounded">
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-xs text-gray-400">No IMG</span>
+                    )}
+                  </div>
+                  <div className="text-xs text-gray-600">
+                    <p><span className="font-medium">SKU:</span> {p.sku || '-'}</p>
+                    <p><span className="font-medium">Stock:</span> {p.stock || 0}</p>
+                    <p><span className="font-medium">Min:</span> {p.minStock ?? 5}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-
-            {/* Pagination */}
-            <div className="flex justify-center mt-4 space-x-2">
-              <Button
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Prev
-              </Button>
-              <span className="px-2 py-1 text-sm">
-                Page {page} of {totalPages}
-              </span>
-              <Button
-                size="sm"
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
-            </div>
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => setEdit({ open: true, product: p })}>Edit</Button>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    onClick={() => setConfirm({ open: true, id: p.id, name: p.name })}
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            ))}
           </div>
-        )}
 
-        {/* Modals */}
-        <AddProductModal
-          open={openAdd}
-          onClose={() => setOpenAdd(false)}
-          onCreated={() => { setOpenAdd(false); refresh() }}  // Fix: wire refresh
-          createProduct={createProduct}
+          {/* Pagination */}
+          <div className="flex justify-center mt-6 gap-2 text-sm">
+            <Button size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>Prev</Button>
+            <span className="px-2 py-1">Page {page} of {totalPages}</span>
+            <Button size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>Next</Button>
+          </div>
+        </div>
+      )}
+
+      {/* Modals */}
+      <AddProductModal
+        open={openAdd}
+        onClose={() => setOpenAdd(false)}
+        onCreated={refresh}
+        createProduct={createProduct}
+      />
+      <EditProductModal
+        open={edit.open}
+        onClose={() => setEdit({ open: false, product: null })}
+        product={edit.product}
+        onSave={onEditSave}
+      />
+      {confirm.open && (
+        <DeleteConfirmModal
+          confirm={confirm}
+          setConfirm={setConfirm}
+          onDelete={onDelete}
         />
-        <EditProductModal
-          open={edit.open}
-          onClose={() => setEdit({ open: false, product: null })}
-          product={edit.product}
-          onSave={onEditSave}
-        />
-        {confirm.open && (
-          <DeleteConfirmModal
-            confirm={confirm}
-            setConfirm={setConfirm}
-            onDelete={onDelete}
-          />
-        )}
-      </div>
+      )}
     </div>
   )
 }
 
-/* ----------------------- EditProductModal ----------------------- */
+/* ---------------- EditProductModal ---------------- */
 function EditProductModal({ open, onClose, product, onSave }) {
   const [form, setForm] = useState(product || {})
+  useEffect(() => { setForm(product || {}) }, [product])
 
-  useEffect(() => {
-    setForm(product || {})
-  }, [product])
-
-  const change = (k) => (e) => {
-    const v =
-      e?.target?.type === 'number' ? Number(e.target.value) : e.target.value
-    setForm((s) => ({ ...s, [k]: v }))
+  const change = k => e => {
+    const v = e?.target?.type === 'number' ? Number(e.target.value) : e.target.value
+    setForm(s => ({ ...s, [k]: v }))
   }
 
-  const submit = async (e) => {
+  const submit = async e => {
     e.preventDefault()
     await onSave(form)
   }
 
   if (!open) return null
   return (
-    <div className="apm-backdrop" onClick={onClose}>
-      <div className="apm-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="apm-head">
-          <div className="apm-title">Edit Product</div>
-          <button className="apm-x" onClick={onClose}>
-            ×
-          </button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+      <div className="bg-white w-full max-w-lg rounded-lg shadow-lg p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Edit Product</h2>
+          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">×</button>
         </div>
-        <form className="apm-body" onSubmit={submit}>
-          <div className="apm-grid">
-            <div className="apm-field">
-              <label>Name</label>
-              <input
-                value={form.name || ''}
-                onChange={change('name')}
-                required
-              />
+        <form onSubmit={submit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="text-sm">Name</label>
+              <input value={form.name || ''} onChange={change('name')} className="w-full border rounded px-3 py-2" required />
             </div>
-            <div className="apm-field">
-              <label>SKU</label>
-              <input value={form.sku || ''} onChange={change('sku')} />
+            <div>
+              <label className="text-sm">SKU</label>
+              <input value={form.sku || ''} onChange={change('sku')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field">
-              <label>Category</label>
-              <input value={form.category || ''} onChange={change('category')} />
+            <div>
+              <label className="text-sm">Category</label>
+              <input value={form.category || ''} onChange={change('category')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field">
-              <label>Price</label>
-              <input
-                type="number"
-                step="0.01"
-                value={form.price || 0}
-                onChange={change('price')}
-              />
+            <div>
+              <label className="text-sm">Price</label>
+              <input type="number" step="0.01" value={form.price || 0} onChange={change('price')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field">
-              <label>Stock</label>
-              <input
-                type="number"
-                value={form.stock || 0}
-                onChange={change('stock')}
-              />
+            <div>
+              <label className="text-sm">Stock</label>
+              <input type="number" value={form.stock || 0} onChange={change('stock')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field">
-              <label>Min Stock</label>
-              <input
-                type="number"
-                value={form.minStock ?? 5}
-                onChange={change('minStock')}
-              />
+            <div>
+              <label className="text-sm">Min Stock</label>
+              <input type="number" value={form.minStock ?? 5} onChange={change('minStock')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field apm-col-span">
-              <label>Image URL</label>
-              <input value={form.image || ''} onChange={change('image')} />
+            <div className="sm:col-span-2">
+              <label className="text-sm">Image URL</label>
+              <input value={form.image || ''} onChange={change('image')} className="w-full border rounded px-3 py-2" />
             </div>
-            <div className="apm-field apm-col-span">
-              <label>Description</label>
-              <textarea
-                rows={3}
-                value={form.description || ''}
-                onChange={change('description')}
-              />
+            <div className="sm:col-span-2">
+              <label className="text-sm">Description</label>
+              <textarea rows={3} value={form.description || ''} onChange={change('description')} className="w-full border rounded px-3 py-2" />
             </div>
           </div>
-          <div className="apm-foot">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
             <Button type="submit">Save</Button>
           </div>
         </form>
@@ -395,44 +277,23 @@ function EditProductModal({ open, onClose, product, onSave }) {
   )
 }
 
-/* ----------------------- DeleteConfirmModal ----------------------- */
+/* ---------------- DeleteConfirmModal ---------------- */
 function DeleteConfirmModal({ confirm, setConfirm, onDelete }) {
   return (
-    <div className="apm-backdrop" onClick={() => setConfirm({ open: false, id: null, name: '' })}>
-      <div className="apm-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="apm-head">
-          <div className="apm-title">Delete Product</div>
-          <button
-            className="apm-x"
-            onClick={() => setConfirm({ open: false, id: null, name: '' })}
-          >
-            ×
-          </button>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setConfirm({ open: false, id: null, name: '' })}>
+      <div className="bg-white w-full max-w-sm rounded-lg shadow-lg p-6" onClick={e => e.stopPropagation()}>
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-lg font-semibold">Delete Product</h2>
+          <button className="text-gray-500 hover:text-gray-700" onClick={() => setConfirm({ open: false, id: null, name: '' })}>×</button>
         </div>
-        <div className="apm-body">
-          Are you sure you want to delete “{confirm.name}”? This action cannot
-          be undone.
-        </div>
-        <div className="apm-foot">
-          <Button
-            variant="ghost"
-            onClick={() => setConfirm({ open: false, id: null, name: '' })}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="danger"
-            onClick={async () => {
-              const id = confirm.id
-              setConfirm({ open: false, id: null, name: '' })
-              await onDelete(id)
-            }}
-          >
-            Delete
-          </Button>
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete “{confirm.name}”? This action cannot be undone.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
+          <Button variant="danger" onClick={async () => { const id = confirm.id; setConfirm({ open: false, id: null, name: '' }); await onDelete(id) }}>Delete</Button>
         </div>
       </div>
     </div>
   )
 }
-
