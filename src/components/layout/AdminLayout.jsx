@@ -1,3 +1,4 @@
+// AdminLayout.jsx
 import React, { useEffect, useState } from 'react'
 import { Outlet } from 'react-router-dom'
 import Topbar from './Topbar'
@@ -6,7 +7,6 @@ import Sidebar from './Sidebar'
 export default function AdminLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
-  // lock body scroll when drawer open
   useEffect(() => {
     if (sidebarOpen) {
       document.body.style.overflow = 'hidden'
@@ -20,7 +20,6 @@ export default function AdminLayout() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
-      {/* Topbar */}
       <Topbar onToggleSidebar={() => setSidebarOpen((s) => !s)} />
 
       <div className="flex flex-1 overflow-hidden">

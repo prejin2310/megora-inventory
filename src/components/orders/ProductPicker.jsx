@@ -43,21 +43,53 @@ export default function ProductPicker({ onAdd }) {
   }
 
   return (
-    <div className="card vstack gap">
-      <h3>Add item</h3>
-      {error && <div className="error">{error}</div>}
-      <input placeholder="Search (name, SKU, category)" value={search} onChange={e => setSearch(e.target.value)} />
-      <div className="grid two">
-        <select value={selectedId} onChange={e => setSelectedId(e.target.value)}>
+    <div className="bg-white rounded-2xl shadow-md p-4 space-y-4">
+      <h3 className="text-lg font-semibold text-gray-800">Add Item</h3>
+
+      {error && (
+        <div className="bg-red-50 text-red-600 text-sm p-2 rounded-lg">
+          {error}
+        </div>
+      )}
+
+      {/* Search box */}
+      <input
+        placeholder="Search (name, SKU, category)"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        className="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+      />
+
+      {/* Product + Qty */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <select
+          value={selectedId}
+          onChange={e => setSelectedId(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        >
           <option value="">Select product</option>
           {filtered.map(p => (
-            <option key={p.id} value={p.id}>{p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})</option>
+            <option key={p.id} value={p.id}>
+              {p.sku} — {p.name} (₹{Number(p.price || 0).toFixed(2)})
+            </option>
           ))}
         </select>
-        <input type="number" min="1" value={qty} onChange={e => setQty(e.target.value)} placeholder="Qty" />
+
+        <input
+          type="number"
+          min="1"
+          value={qty}
+          onChange={e => setQty(e.target.value)}
+          placeholder="Qty"
+          className="border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+        />
       </div>
-      <div className="hstack" style={{ justifyContent: 'flex-end' }}>
-        <Button type="button" onClick={add} disabled={!selectedId}>Add Item</Button>
+
+      {/* Button */}
+      <div className="flex justify-end">
+        <Button type="button" onClick={add} disabled={!selectedId}>
+          Add Item
+        </Button>
       </div>
     </div>
   )

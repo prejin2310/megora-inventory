@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 
 export default function Sidebar({ className = '', onNav = () => {} }) {
   const baseLink =
-    "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors"
+    "block px-4 py-2 rounded-md text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 focus-visible:ring-offset-2"
   const activeLink =
     "bg-gray-200 font-medium text-gray-900"
 

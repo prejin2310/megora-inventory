@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react'
 import { listProducts, updateProductStock } from '../../firebase/firestore'
 import Button from '../ui/Button'
 
-const DEFAULT_MIN_STOCK = 5
+const DEFAULT_MIN_STOCK = 4
 
 export default function LowStockWidget() {
   const [products, setProducts] = useState([])
@@ -90,20 +90,28 @@ export default function LowStockWidget() {
     }
   }
 
+  const stockClass = (stock, min) => {
+    if (stock <= 1) return 'bg-red-100 text-red-700 font-semibold px-2 py-1 rounded'
+    if (stock <= min) return 'bg-yellow-100 text-yellow-700 font-semibold px-2 py-1 rounded'
+    return 'bg-green-100 text-green-700 font-semibold px-2 py-1 rounded'
+  }
+
   return (
-    <div className="card vstack" style={{ gap: 10 }}>
-      <div className="hstack" style={{ alignItems: 'center' }}>
-        <h3 style={{ margin: 0 }}>{title}</h3>
-        <div className="grow" />
-        <div className="seg">
+    <div className="bg-white border rounded-xl shadow-sm p-4 flex flex-col gap-4">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <h3 className="text-lg font-bold">{title}</h3>
+        <div className="flex-1" />
+        {/* Segmented Control */}
+        <div className="inline-flex bg-gray-100 rounded-full p-1 text-sm">
           <button
-            className={`seg-btn ${tab === 'LOW' ? 'active' : ''}`}
+            className={`px-3 py-1 rounded-full ${tab === 'LOW' ? 'bg-white shadow font-semibold' : 'text-gray-600'}`}
             onClick={() => setTab('LOW')}
           >
             Low Stock
           </button>
           <button
-            className={`seg-btn ${tab === 'OUT' ? 'active' : ''}`}
+            className={`px-3 py-1 rounded-full ${tab === 'OUT' ? 'bg-white shadow font-semibold' : 'text-gray-600'}`}
             onClick={() => setTab('OUT')}
           >
             Out of Stock
@@ -111,10 +119,9 @@ export default function LowStockWidget() {
         </div>
         {tab === 'LOW' && (
           <button
-            className="toggle-view"
             type="button"
             onClick={() => setUseGridForLow(v => !v)}
-            title={useGridForLow ? 'Show table view' : 'Show grid view'}
+            className="border rounded-full px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
           >
             {useGridForLow ? 'Table View' : 'Grid View'}
           </button>
@@ -122,35 +129,36 @@ export default function LowStockWidget() {
         <Button size="sm">Export PDF</Button>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {/* Body */}
+      {error && <div className="text-red-600 text-sm">{error}</div>}
       {loading ? (
-        <div className="muted">Loading…</div>
+        <div className="text-gray-500 text-sm">Loading…</div>
       ) : rows.length === 0 ? (
-        <div className="muted">No products in this list.</div>
+        <div className="text-gray-500 text-sm">No products in this list.</div>
       ) : (
         <>
           {tab === 'LOW' && useGridForLow ? (
-            <div className="ls-grid">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
               {lowList.map(p => {
                 const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
                 const stock = Number(p.stock ?? 0)
                 return (
-                  <div key={p.id} className="ls-card">
-                    <div className="ls-top">
-                      <div className="ls-name">{p.name || '-'}</div>
-                      <div className="ls-sku muted">{p.sku || '-'}</div>
+                  <div key={p.id} className="border rounded-lg p-3 bg-white flex flex-col gap-2 shadow-sm">
+                    <div>
+                      <div className="font-bold truncate">{p.name || '-'}</div>
+                      <div className="text-xs text-gray-500">{p.sku || '-'}</div>
                     </div>
-                    <div className="ls-mid">
-                      <div className="ls-meta">
-                        <div className="muted">Stock</div>
-                        <div className="ls-strong">{stock}</div>
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <div className="text-gray-500">Stock</div>
+                        <div className="font-bold">{stock}</div>
                       </div>
-                      <div className="ls-meta">
-                        <div className="muted">Min</div>
+                      <div>
+                        <div className="text-gray-500">Min</div>
                         <div>{min}</div>
                       </div>
                     </div>
-                    <div className="ls-foot">
+                    <div className="flex justify-end">
                       <Button size="sm" onClick={() => restock(p)} disabled={!!restocking[p.id]}>
                         {restocking[p.id] ? 'Updating…' : 'Restock'}
                       </Button>
@@ -160,38 +168,27 @@ export default function LowStockWidget() {
               })}
             </div>
           ) : (
-            <div className="table-scroll">
-              <div className="table-like">
-                <div className="t-head">
+            <div className="overflow-x-auto">
+              <div className="min-w-[600px] border rounded-lg">
+                <div className="grid grid-cols-[120px_1fr_90px_70px_120px] gap-3 items-center bg-gray-50 px-3 py-2 font-semibold text-sm">
                   <div>SKU</div>
                   <div>Name</div>
                   <div>Stock</div>
                   <div>Min</div>
                   <div></div>
                 </div>
-                <div className="t-body">
+                <div>
                   {rows.map(p => {
                     const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
                     const stock = Number(p.stock ?? 0)
                     return (
-                      <div key={p.id} className="t-row">
-                        <div className="mono">{p.sku || '-'}</div>
-                        <div className="ell">{p.name || '-'}</div>
-                        <div
-                          className={`stock-cell ${
-                            stock <= 1 ? 'stock-critical' :
-                            stock <= min ? 'stock-low' : 'stock-ok'
-                          }`}
-                        >
-                          {stock}
-                        </div>
-                        <div className="muted">{min}</div>
-                        <div className="right">
-                          <Button
-                            size="sm"
-                            onClick={() => restock(p)}
-                            disabled={!!restocking[p.id]}
-                          >
+                      <div key={p.id} className="grid grid-cols-[120px_1fr_90px_70px_120px] gap-3 items-center px-3 py-2 border-t text-sm">
+                        <div className="font-mono text-xs">{p.sku || '-'}</div>
+                        <div className="truncate">{p.name || '-'}</div>
+                        <div className={stockClass(stock, min)}>{stock}</div>
+                        <div className="text-gray-500">{min}</div>
+                        <div className="text-right">
+                          <Button size="sm" onClick={() => restock(p)} disabled={!!restocking[p.id]}>
                             {restocking[p.id] ? 'Updating…' : 'Restock'}
                           </Button>
                         </div>
@@ -205,19 +202,19 @@ export default function LowStockWidget() {
         </>
       )}
 
-      {/* ✅ Critical Stock Alert Modal */}
+      {/* Critical Modal */}
       {showCriticalModal && (
-        <div className="modal-backdrop">
-          <div className="modal">
-            <h3>⚠ Critical Stock Alert</h3>
-            <ul>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-lg p-4 max-w-sm w-full">
+            <h3 className="text-lg font-bold mb-2">⚠ Critical Stock Alert</h3>
+            <ul className="list-disc list-inside text-sm text-gray-700">
               {criticalList.map(p => (
                 <li key={p.id}>
                   {p.name || p.sku || '-'} – Stock: {p.stock ?? 0}
                 </li>
               ))}
             </ul>
-            <div style={{ textAlign: "right", marginTop: "10px" }}>
+            <div className="text-right mt-4">
               <Button size="sm" onClick={() => setShowCriticalModal(false)}>
                 Dismiss
               </Button>
@@ -225,87 +222,6 @@ export default function LowStockWidget() {
           </div>
         </div>
       )}
-
-      <style>{`
-/* Stock cell coloring */
-.stock-cell {
-  padding: 4px 6px;
-  border-radius: 6px;
-  text-align: center;
-  font-weight: 600;
-}
-.stock-critical { background: #fee2e2; color: #b91c1c; }
-.stock-low { background: #fef3c7; color: #92400e; }
-.stock-ok { background: #dcfce7; color: #065f46; }
-
-.seg { display: inline-flex; background: #f3f4f6; border-radius: 999px; padding: 2px; margin-right: 8px; }
-.seg-btn { border: 0; background: transparent; padding: 6px 10px; border-radius: 999px; cursor: pointer; }
-.seg-btn.active { background: #ffffff; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
-.toggle-view { border: 1px solid #e5e7eb; background: #fff; border-radius: 999px; padding: 6px 10px; margin-right: 8px; cursor: pointer; }
-
-/* Table */
-.table-like { border: 1px solid #e5e7eb; border-radius: 10px; overflow: hidden; }
-.t-head, .t-row {
-  display: grid; grid-template-columns: 120px 1fr 90px 70px 120px; gap: 10px; align-items: center;
-}
-.t-head { background: #f9fafb; padding: 10px 12px; font-weight: 600; }
-.t-body .t-row { padding: 10px 12px; border-top: 1px dashed #e5e7eb; }
-.t-body .t-row:first-child { border-top: none; }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace; font-size: 12px; }
-.ell { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.right { text-align: right; }
-@media (max-width: 720px) {
-  .t-head, .t-row { grid-template-columns: 100px 1fr 70px 60px 100px; }
-}
-
-/* Grid */
-.ls-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-@media (max-width: 1279px) { .ls-grid { grid-template-columns: repeat(4, 1fr); } }
-@media (max-width: 1023px) { .ls-grid { grid-template-columns: repeat(3, 1fr); } }
-@media (max-width: 767px) { .ls-grid { grid-template-columns: repeat(2, 1fr); } }
-@media (max-width: 479px) { .ls-grid { grid-template-columns: 1fr; } }
-.ls-card {
-  border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 10px 12px;
-  display: grid; gap: 8px;
-}
-.ls-top { display: grid; gap: 2px; }
-.ls-name { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.ls-sku { font-size: 12px; }
-.ls-mid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-.ls-meta { display: grid; gap: 2px; }
-.ls-strong { font-weight: 800; }
-.ls-foot { display: flex; justify-content: flex-end; }
-
-/* Scroll wrapper */
-.table-scroll {
-  width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
-}
-.table-like {
-  min-width: 600px;
-}
-
-/* ✅ Critical Modal */
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-}
-.modal {
-  background: #fff;
-  padding: 20px;
-  border-radius: 12px;
-  max-width: 400px;
-  width: 100%;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
-}
-`}</style>
-
     </div>
   )
 }

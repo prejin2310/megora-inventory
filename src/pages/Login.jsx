@@ -26,9 +26,13 @@ export default function Login() {
     try {
       await login(email, password || '987Megora123')
       if (remember) {
-        try { localStorage.setItem('remember', '1') } catch {}
+        try {
+          localStorage.setItem('remember', '1')
+        } catch {}
       } else {
-        try { localStorage.removeItem('remember') } catch {}
+        try {
+          localStorage.removeItem('remember')
+        } catch {}
       }
       nav('/admin', { replace: true })
     } catch (err) {
@@ -39,159 +43,99 @@ export default function Login() {
   }
 
   return (
-    <div className="auth-center wide">
-      <Card>
+    <div className="min-h-screen grid place-items-center px-3 py-7 bg-[radial-gradient(900px_480px_at_10%_-10%,rgba(2,79,61,0.06),transparent_50%)] bg-[#f5f7fb]">
+      <Card className="w-full max-w-2xl">
         {/* Brand header */}
-        <div className="auth-brand">
-          <img className="auth-logo" src={LOGO_URL} alt="Megora Jewels" />
-          <div className="auth-title">Megora Jewels</div>
-          <div className="auth-sub">Admin Login</div>
+        <div className="grid place-items-center gap-1.5 pb-2 mb-3 border-b border-gray-200">
+          <img
+            className="w-20 h-20 object-contain drop-shadow-lg"
+            src={LOGO_URL}
+            alt="Megora Jewels"
+          />
+          <div className="font-extrabold tracking-wide text-lg text-slate-900">
+            Megora Jewels
+          </div>
+          <div className="text-sm text-gray-500">Admin Login</div>
         </div>
 
-        <form onSubmit={onSubmit} className="auth-form vstack" style={{ gap: 12 }}>
-          {error && <div className="auth-error" role="alert">{error}</div>}
+        {/* Form */}
+        <form onSubmit={onSubmit} className="space-y-4">
+          {error && (
+            <div
+              className="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm"
+              role="alert"
+            >
+              {error}
+            </div>
+          )}
 
           {/* Email */}
-          <div className="vstack" style={{ gap: 6 }}>
-            <label className="auth-label" htmlFor="email">Email</label>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="email"
+              className="text-sm font-medium text-gray-600"
+            >
+              Email
+            </label>
             <Input
               id="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
               autoComplete="email"
             />
           </div>
 
           {/* Password with toggle */}
-          <div className="vstack" style={{ gap: 6 }}>
-            <label className="auth-label" htmlFor="password">Password</label>
-            <div className="auth-pass">
+          <div className="space-y-1.5">
+            <label
+              htmlFor="password"
+              className="text-sm font-medium text-gray-600"
+            >
+              Password
+            </label>
+            <div className="relative">
               <Input
                 id="password"
                 type={showPass ? 'text' : 'password'}
                 value={password}
-                onChange={e => setPassword(e.target.value)}
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 autoComplete="current-password"
               />
               <button
                 type="button"
-                className="auth-pass-toggle"
-                onClick={() => setShowPass(s => !s)}
+                onClick={() => setShowPass((s) => !s)}
                 aria-label={showPass ? 'Hide password' : 'Show password'}
                 title={showPass ? 'Hide password' : 'Show password'}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-[BRAND_GREEN] font-bold text-sm px-2 py-1 rounded-md hover:bg-green-100"
+                style={{ color: BRAND_GREEN }}
               >
                 {showPass ? 'Hide' : 'Show'}
               </button>
             </div>
           </div>
 
-          {/* Row: remember only (forgot password removed) */}
-          <div className="auth-row single">
-            <label className="auth-check">
+          {/* Remember me */}
+          <div className="flex items-center gap-2 text-sm text-slate-800">
+            <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={remember}
-                onChange={e => setRemember(e.target.checked)}
+                onChange={(e) => setRemember(e.target.checked)}
+                className="rounded border-gray-300 text-[BRAND_GREEN] focus:ring-[BRAND_GREEN]"
+                style={{ accentColor: BRAND_GREEN }}
               />
               <span>Remember me</span>
             </label>
           </div>
 
-          <Button type="submit" disabled={loading}>
+          {/* Submit */}
+          <Button type="submit" disabled={loading} className="w-full">
             {loading ? 'Signing in…' : 'Sign In'}
           </Button>
         </form>
       </Card>
-
-      {/* Inline scoped styles */}
-      <style>{`
-        .auth-center {
-          min-height: 100vh;
-          display: grid;
-          place-items: center;
-          padding: 28px 12px;
-          background:
-            radial-gradient(900px 480px at 10% -10%, rgba(2,79,61,0.06), transparent 50%),
-            #f5f7fb;
-        }
-        /* Wider container for the card */
-        .auth-center.wide > * {
-          width: min(720px, 96vw); /* increased from ~560-640 to 720 for a roomier feel */
-        }
-
-        .auth-brand {
-          display: grid;
-          place-items: center;
-          gap: 6px;
-          padding-bottom: 8px;
-          margin-bottom: 12px;
-          border-bottom: 1px solid #e5e7eb;
-        }
-        .auth-logo {
-          width: 72px;
-          height: 72px;
-          object-fit: contain;
-          filter: drop-shadow(0 6px 14px rgba(2,79,61,0.18));
-        }
-        .auth-title {
-          font-weight: 800;
-          letter-spacing: .3px;
-          font-size: 18px;
-          color: #0f172a;
-        }
-        .auth-sub {
-          color: #6b7280;
-          font-size: 13px;
-        }
-        .auth-form { margin-top: 6px; }
-        .auth-label { font-size: 13px; color: #6b7280; }
-
-        .auth-pass { position: relative; }
-        .auth-pass-toggle {
-          position: absolute;
-          right: 8px;
-          top: 50%;
-          transform: translateY(-50%);
-          border: 0;
-          background: transparent;
-          color: ${BRAND_GREEN};
-          font-weight: 700;
-          cursor: pointer;
-          padding: 6px 8px;
-          border-radius: 8px;
-        }
-        .auth-pass-toggle:hover { background: rgba(2,79,61,0.08); }
-
-        .auth-row.single {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 10px;
-          margin-top: 2px;
-        }
-        .auth-check {
-          display: inline-flex;
-          gap: 8px;
-          align-items: center;
-          color: #0f172a;
-          font-size: 14px;
-        }
-
-        .auth-error {
-          background: #fef2f2;
-          color: #991b1b;
-          border: 1px solid #fecaca;
-          padding: 10px 12px;
-          border-radius: 10px;
-          font-size: 14px;
-        }
-
-        @media (max-width: 420px) {
-          .auth-center.wide > * { width: 100%; }
-        }
-      `}</style>
     </div>
   )
 }
