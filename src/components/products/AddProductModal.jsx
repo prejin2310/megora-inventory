@@ -177,12 +177,12 @@ export default function AddProductModal({ open, onClose, onCreated, createProduc
             </div>
 
             <div className="apm-field">
-              <label>Stock</label>
+              <label>Total Stock</label>
               <input type="number" value={stock} onChange={e => setStock(e.target.value)} placeholder="e.g., 10" required />
             </div>
 
             <div className="apm-field">
-              <label>Min Stock</label>
+              <label>Min Stock (For Low stock alert)</label>
               <input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} placeholder="Default 5" />
             </div>
 

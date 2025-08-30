@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react'
-import { createCustomer, listCustomers, deleteCustomer } from '../../firebase/firestore'
+import { createCustomer, listCustomers, deleteCustomer, updateCustomer } from '../../firebase/firestore'
 import CustomerForm from '../../components/customers/CustomerForm'
 
 function usePagination(data, initialPageSize = 10) {
@@ -23,10 +23,10 @@ function usePagination(data, initialPageSize = 10) {
 export default function Customers() {
   const [items, setItems] = useState([])
   const [error, setError] = useState('')
-  const [busy, setBusy] = useState(false)
   const [creating, setCreating] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [confirm, setConfirm] = useState({ open: false, id: null, name: '' })
+  const [edit, setEdit] = useState({ open: false, customer: null })
 
   const refresh = async () => {
     setError('')
@@ -71,6 +71,24 @@ export default function Customers() {
       setError(e.message || 'Failed to delete customer')
     } finally {
       setDeletingId(null)
+    }
+  }
+
+  const onEditSave = async (form) => {
+    setError('')
+    if (!form?.id) return
+    try {
+      await updateCustomer(form.id, {
+        name: (form.name || '').trim(),
+        email: (form.email || '').trim(),
+        phone: (form.phone || '').trim(),
+        address: (form.address || '').trim(),
+      })
+      setEdit({ open: false, customer: null })
+      await refresh()
+    } catch (e) {
+      console.error('Update customer error:', e)
+      setError(e.message || 'Failed to update customer')
     }
   }
 
@@ -134,14 +152,23 @@ export default function Customers() {
                     <td data-th="Phone">{c.phone}</td>
                     <td data-th="Address" className="hide-sm">{c.address}</td>
                     <td className="right" data-th="Actions">
-                      <button
-                        className="btn danger"
-                        onClick={() => setConfirm({ open: true, id: c.id, name: c.name })}
-                        disabled={deletingId === c.id}
-                        title="Delete customer"
-                      >
-                        {deletingId === c.id ? 'Deleting…' : 'Delete'}
-                      </button>
+                      <div className="row-actions">
+                        <button
+                          className="btn"
+                          onClick={() => setEdit({ open: true, customer: c })}
+                          title="Edit customer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="btn danger"
+                          onClick={() => setConfirm({ open: true, id: c.id, name: c.name })}
+                          disabled={deletingId === c.id}
+                          title="Delete customer"
+                        >
+                          {deletingId === c.id ? 'Deleting…' : 'Delete'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -185,6 +212,14 @@ export default function Customers() {
         />
       )}
 
+      {/* Edit customer modal */}
+      <EditCustomerModal
+        open={edit.open}
+        customer={edit.customer}
+        onClose={() => setEdit({ open: false, customer: null })}
+        onSave={onEditSave}
+      />
+
       <style>{`
         :root {
           --ink: #0f172a;
@@ -213,6 +248,7 @@ export default function Customers() {
         .rt thead th { font-weight: 800; font-size: 13px; color: var(--ink); background: #f8fafc; position: sticky; top: 0; z-index: 1; }
         .rt tbody tr:hover { background: #fafafa; }
         .right { text-align: right; }
+        .row-actions { display: inline-flex; gap: 8px; }
         @media (max-width: 640px) {
           .hide-sm { display: none; }
           .rt thead { display: none; }
@@ -233,14 +269,21 @@ export default function Customers() {
         .pg-num.active { border-color: rgba(2,79,61,.35); background: #f2fbf8; color: var(--brand); font-weight: 800; }
         .pager-meta { margin-top: 4px; font-size: 12px; }
 
-        /* DeleteConfirmModal styles aligned with Products */
+        /* Shared modal styles (aligned with Products) */
         .apm-backdrop { position: fixed; inset: 0; background: rgba(15,23,42,.45); display: grid; place-items: center; z-index: 50; padding: 16px; }
-        .apm-modal { width: min(520px, 96vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.18); overflow: hidden; }
+        .apm-modal { width: min(600px, 96vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.18); overflow: hidden; }
         .apm-head { display: flex; align-items: center; gap: 8px; padding: 12px; border-bottom: 1px solid #eef0f2; background: #f8fafc; }
         .apm-title { font-weight: 800; }
         .apm-x { margin-left: auto; width: 28px; height: 28px; border: 1px solid #e2e8f0; background: #f1f5f9; border-radius: 8px; cursor: pointer; }
         .apm-body { padding: 12px; }
         .apm-foot { display: flex; justify-content: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid #eef0f2; }
+        .apm-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+        .apm-field { display: grid; gap: 4px; }
+        .apm-field label { font-size: 12px; color: #6b7280; }
+        .apm-field input, .apm-field textarea { border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px; font-size: 14px; outline: none; }
+        .apm-field input:focus, .apm-field textarea:focus { border-color: #94a3b8; box-shadow: 0 0 0 3px rgba(14,165,233,.12); }
+        .apm-col-span { grid-column: 1 / -1; }
+        @media (max-width: 720px) { .apm-grid { grid-template-columns: 1fr; } }
       `}</style>
     </div>
   )
@@ -281,6 +324,62 @@ function DeleteConfirmModal({ confirm, setConfirm, onDelete }) {
             Delete
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+/* Edit customer modal */
+function EditCustomerModal({ open, customer, onClose, onSave }) {
+  const [form, setForm] = useState(customer || {})
+
+  useEffect(() => {
+    setForm(customer || {})
+  }, [customer])
+
+  if (!open) return null
+
+  const change = (k) => (e) => {
+    const v = e?.target?.value ?? ''
+    setForm(s => ({ ...s, [k]: v }))
+  }
+
+  const submit = async (e) => {
+    e.preventDefault()
+    await onSave(form)
+  }
+
+  return (
+    <div className="apm-backdrop" onClick={onClose}>
+      <div className="apm-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="apm-head">
+          <div className="apm-title">Edit Customer</div>
+          <button className="apm-x" onClick={onClose}>×</button>
+        </div>
+        <form className="apm-body" onSubmit={submit}>
+          <div className="apm-grid">
+            <div className="apm-field">
+              <label>Name</label>
+              <input value={form.name || ''} onChange={change('name')} required />
+            </div>
+            <div className="apm-field">
+              <label>Email</label>
+              <input type="email" value={form.email || ''} onChange={change('email')} />
+            </div>
+            <div className="apm-field">
+              <label>Phone</label>
+              <input value={form.phone || ''} onChange={change('phone')} />
+            </div>
+            <div className="apm-field apm-col-span">
+              <label>Address</label>
+              <textarea rows={3} value={form.address || ''} onChange={change('address')} />
+            </div>
+          </div>
+          <div className="apm-foot">
+            <button type="button" className="btn" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn">Save</button>
+          </div>
+        </form>
       </div>
     </div>
   )
