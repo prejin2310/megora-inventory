@@ -1,6 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import Button from '../../components/ui/Button'
 import AddProductModal from '../../components/products/AddProductModal'
+import EditProductModal from '../../components/products/EditProductModal'
+import DeleteConfirmModal from '../../components/products/DeleteConfirmModal'
+
+
 import {
   listProducts,
   createProduct,
@@ -93,23 +97,23 @@ export default function Products() {
       ) : filtered.length === 0 ? (
         <p className="text-gray-500">No products found</p>
       ) : (
-        <div className="overflow-x-auto">
-          {/* Desktop Table */}
-          <table className="hidden md:table w-full text-left border-collapse">
+        <div className="overflow-x-auto rounded-lg shadow-sm">
+          {/* Responsive Table */}
+          <table className="min-w-full border border-gray-200 text-sm">
             <thead>
-              <tr className="bg-gray-100 text-sm text-gray-600">
-                <th className="px-4 py-2">Image</th>
-                <th className="px-4 py-2">Name</th>
-                <th className="px-4 py-2">SKU</th>
-                <th className="px-4 py-2">Category</th>
-                <th className="px-4 py-2">Price</th>
-                <th className="px-4 py-2">Stock</th>
-                <th className="px-4 py-2">Actions</th>
+              <tr className="bg-gray-100 text-gray-600 text-xs uppercase tracking-wide">
+                <th className="px-4 py-2 text-left">Image</th>
+                <th className="px-4 py-2 text-left">Name</th>
+                <th className="px-4 py-2 text-left">SKU</th>
+                <th className="px-4 py-2 text-left">Category</th>
+                <th className="px-4 py-2 text-left">Price</th>
+                <th className="px-4 py-2 text-left">Stock</th>
+                <th className="px-4 py-2 text-left">Actions</th>
               </tr>
             </thead>
             <tbody>
               {paged.map(p => (
-                <tr key={p.id} className="border-t text-sm">
+                <tr key={p.id} className="border-t hover:bg-gray-50">
                   <td className="px-4 py-2">
                     {p.image ? (
                       <img src={p.image} alt={p.name} className="h-12 w-12 object-cover rounded" />
@@ -122,7 +126,7 @@ export default function Products() {
                   <td className="px-4 py-2">{p.category}</td>
                   <td className="px-4 py-2">₹{p.price}</td>
                   <td className="px-4 py-2">{p.stock}</td>
-                  <td className="px-4 py-2 flex gap-2">
+                  <td className="px-4 py-2 flex flex-wrap gap-2">
                     <Button size="sm" onClick={() => setEdit({ open: true, product: p })}>Edit</Button>
                     <Button
                       size="sm"
@@ -136,45 +140,6 @@ export default function Products() {
               ))}
             </tbody>
           </table>
-
-          {/* Mobile Cards */}
-          <div className="grid gap-4 md:hidden">
-            {paged.map(p => (
-              <div key={p.id} className="bg-white p-4 rounded-lg shadow">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="font-semibold">{p.name || '-'}</h3>
-                    <p className="text-xs text-gray-500">{p.category || '—'}</p>
-                  </div>
-                  <div className="text-sm font-bold">₹{Number(p.price || 0).toFixed(2)}</div>
-                </div>
-                <div className="flex gap-3 mb-3">
-                  <div className="h-16 w-16 bg-gray-100 flex items-center justify-center overflow-hidden rounded">
-                    {p.image ? (
-                      <img src={p.image} alt={p.name} className="h-full w-full object-cover" />
-                    ) : (
-                      <span className="text-xs text-gray-400">No IMG</span>
-                    )}
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    <p><span className="font-medium">SKU:</span> {p.sku || '-'}</p>
-                    <p><span className="font-medium">Stock:</span> {p.stock || 0}</p>
-                    <p><span className="font-medium">Min:</span> {p.minStock ?? 5}</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => setEdit({ open: true, product: p })}>Edit</Button>
-                  <Button
-                    size="sm"
-                    variant="danger"
-                    onClick={() => setConfirm({ open: true, id: p.id, name: p.name })}
-                  >
-                    Delete
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
 
           {/* Pagination */}
           <div className="flex justify-center mt-6 gap-2 text-sm">
@@ -205,95 +170,6 @@ export default function Products() {
           onDelete={onDelete}
         />
       )}
-    </div>
-  )
-}
-
-/* ---------------- EditProductModal ---------------- */
-function EditProductModal({ open, onClose, product, onSave }) {
-  const [form, setForm] = useState(product || {})
-  useEffect(() => { setForm(product || {}) }, [product])
-
-  const change = k => e => {
-    const v = e?.target?.type === 'number' ? Number(e.target.value) : e.target.value
-    setForm(s => ({ ...s, [k]: v }))
-  }
-
-  const submit = async e => {
-    e.preventDefault()
-    await onSave(form)
-  }
-
-  if (!open) return null
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white w-full max-w-lg rounded-lg shadow-lg p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Edit Product</h2>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">×</button>
-        </div>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm">Name</label>
-              <input value={form.name || ''} onChange={change('name')} className="w-full border rounded px-3 py-2" required />
-            </div>
-            <div>
-              <label className="text-sm">SKU</label>
-              <input value={form.sku || ''} onChange={change('sku')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
-              <label className="text-sm">Category</label>
-              <input value={form.category || ''} onChange={change('category')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
-              <label className="text-sm">Price</label>
-              <input type="number" step="0.01" value={form.price || 0} onChange={change('price')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
-              <label className="text-sm">Stock</label>
-              <input type="number" value={form.stock || 0} onChange={change('stock')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div>
-              <label className="text-sm">Min Stock</label>
-              <input type="number" value={form.minStock ?? 5} onChange={change('minStock')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-sm">Image URL</label>
-              <input value={form.image || ''} onChange={change('image')} className="w-full border rounded px-3 py-2" />
-            </div>
-            <div className="sm:col-span-2">
-              <label className="text-sm">Description</label>
-              <textarea rows={3} value={form.description || ''} onChange={change('description')} className="w-full border rounded px-3 py-2" />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
-            <Button type="submit">Save</Button>
-          </div>
-        </form>
-      </div>
-    </div>
-  )
-}
-
-/* ---------------- DeleteConfirmModal ---------------- */
-function DeleteConfirmModal({ confirm, setConfirm, onDelete }) {
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setConfirm({ open: false, id: null, name: '' })}>
-      <div className="bg-white w-full max-w-sm rounded-lg shadow-lg p-6" onClick={e => e.stopPropagation()}>
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Delete Product</h2>
-          <button className="text-gray-500 hover:text-gray-700" onClick={() => setConfirm({ open: false, id: null, name: '' })}>×</button>
-        </div>
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete “{confirm.name}”? This action cannot be undone.
-        </p>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setConfirm({ open: false, id: null, name: '' })}>Cancel</Button>
-          <Button variant="danger" onClick={async () => { const id = confirm.id; setConfirm({ open: false, id: null, name: '' }); await onDelete(id) }}>Delete</Button>
-        </div>
-      </div>
     </div>
   )
 }
