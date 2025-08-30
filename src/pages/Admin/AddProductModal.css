@@ -1,0 +1,90 @@
+/* Mobile-friendly modal overlay: covers viewport and centers card */
+.apm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: rgba(15,23,42,.5);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  padding: 16px; /* padding gives breathing room on small screens */
+}
+
+/* Modal card with internal scrolling on small screens */
+.apm-modal {
+  width: min(760px, 96vw);
+  max-height: min(90vh, 820px);     /* keep card within viewport height */
+  display: grid;
+  grid-template-rows: auto 1fr auto; /* head | body (scrolls) | foot */
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.18);
+  overflow: hidden;                  /* clip inner scrolling area nicely */
+}
+
+/* Header and footer stay fixed inside card */
+.apm-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #eef0f2;
+  background: #f8fafc;
+}
+.apm-title { font-weight: 800; }
+.apm-x {
+  margin-left: auto;
+  width: 28px; height: 28px;
+  border: 1px solid #e2e8f0;
+  background: #f1f5f9;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+/* Body is the scrollable region inside the card */
+.apm-body {
+  padding: 12px;
+  overflow-y: auto;                  /* internal scroll area */
+  -webkit-overflow-scrolling: touch; /* smoother scroll on iOS */
+}
+
+/* Form grid stays responsive */
+.apm-grid { display: grid; gap: 12px; grid-template-columns: 1fr 1fr; }
+.apm-col-span { grid-column: 1 / -1; }
+.apm-field { display: grid; gap: 4px; }
+.apm-field label { font-size: 12px; color: #64748b; }
+.apm-field input,
+.apm-field textarea,
+.apm-field select {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 14px;
+  outline: none;
+  background: #fff;
+}
+.apm-field input:focus,
+.apm-field textarea:focus,
+.apm-field select:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(14,165,233,.12);
+}
+
+.apm-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* Stack fields on small screens; card still scrolls inside */
+@media (max-width: 720px) {
+  .apm-grid { grid-template-columns: 1fr; }
+}
+
+/* Optional: lock page scroll while modal is open */
+body.modal-open {
+  height: 100vh;
+  overflow: hidden;                  /* prevent body scrolling on desktop/Android */
+}

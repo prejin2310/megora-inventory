@@ -302,3 +302,15 @@ export async function getProductBySku(sku) {
   const docSnap = snap.docs[0]
   return { id: docSnap.id, ...docSnap.data() }
 }
+
+//real time updation of produtt 9add/edit/delete)
+
+export function subscribeProducts(cb) {
+  const db = getFirestore()
+  const colRef = collection(db, 'products')
+  const unsub = onSnapshot(colRef, (snap) => {
+    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
+    cb(items)
+  })
+  return unsub
+}
