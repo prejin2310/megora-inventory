@@ -314,3 +314,34 @@ export function subscribeProducts(cb) {
   })
   return unsub
 }
+
+
+// New: update status + append to history
+export async function updateOrderStatusByPublicId(publicIdOrDocId, status, atDate) {
+  // If you only store publicId, look up the docId first:
+  let targetDocRef
+  if (publicIdOrDocId?.startsWith?.('orders/')) {
+    // already a path
+    targetDocRef = doc(db, publicIdOrDocId)
+  } else {
+    // try by publicId
+    const q = query(collection(db, 'orders'), where('publicId', '==', publicIdOrDocId), limit(1))
+    const snap = await getDocs(q)
+    if (snap.empty) {
+      // fallback: assume it's the actual doc id
+      targetDocRef = doc(db, 'orders', publicIdOrDocId)
+    } else {
+      targetDocRef = snap.docs.ref
+    }
+  }
+
+  const at = atDate instanceof Date ? atDate : new Date()
+  // Prefer serverTimestamp for consistency; UI already handles Timestamp/Date
+  await updateDoc(targetDocRef, {
+    status,
+    history: arrayUnion({
+      status,
+      at: serverTimestamp(),
+    }),
+  })
+}

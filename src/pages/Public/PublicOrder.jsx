@@ -43,6 +43,13 @@ const IconBox = ({ fill = BRAND_GREEN }) => (
     <path d="M21 16V8l-9-5-9 5v8l9 5 9-5z" /><path d="M3.3 7.3L12 12l8.7-4.7" />
   </svg>
 )
+// Optional distinct icon for "Out for Delivery"
+const IconOutForDelivery = ({ fill = BRAND_GREEN }) => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={fill} strokeWidth="2" aria-hidden="true">
+    <path d="M12 21s-6-4.5-6-10a6 6 0 1 1 12 0c0 5.5-6 10-6 10z" />
+    <circle cx="12" cy="11" r="2.5" />
+  </svg>
+)
 
 export default function PublicOrder() {
   const { publicId } = useParams()
@@ -82,25 +89,28 @@ export default function PublicOrder() {
   if (!order) return <div className="po-main">Loading…</div>
 
   const customerName = order?.customer?.name || 'Customer'
-  const shipping = order?.shipping || null
+  const orderNumber = order?.publicId || order?.id || ''
+  const shipping = order?.shipping || {}
+const address = shipping?.address || order?.customer?.address || ""
   const totals = order?.totals || { subtotal: 0, shipping: 0, discount: 0, grandTotal: 0 }
 
-  // Flow
+  // Timeline flow with Out for Delivery added
   const flow = [
     { key: 'Received', label: 'Order Received', icon: <IconDot /> },
     { key: 'Packed', label: 'Item Packed', icon: <IconBox /> },
     { key: 'Waiting for Pickup', label: 'Courier Pickup Initiated', icon: <IconBox /> },
     { key: 'In Transit', label: 'In Transit', icon: <IconTruck /> },
+    { key: 'Out for Delivery', label: 'Out for Delivery', icon: <IconOutForDelivery /> }, // new
     { key: 'Delivered', label: 'Delivered', icon: <IconCheck /> },
   ]
   const currentIndexRaw = flow.findIndex(f => f.key === order.status)
   const currentIndex = currentIndexRaw >= 0 ? currentIndexRaw : 0
 
-  const estDelivery = order?.estimatedDelivery || order?.shipping?.estimatedDelivery || ''
+  const estDelivery = order?.estimatedDelivery || shipping?.estimatedDelivery || ''
   const trackingUrl = (shipping?.trackingUrl || '').trim()
   const canTrack = Boolean(trackingUrl)
 
-  // Return Policy Logic (24h from Delivered timestamp)
+  // Return Policy Logic (24h window from Delivered timestamp)
   let returnExpired = false
   let returnEndsAt = null
   if (order.status === 'Delivered' && statusTimes['Delivered']) {
@@ -109,54 +119,72 @@ export default function PublicOrder() {
     returnExpired = new Date() > returnEndsAt
   }
 
+  // WhatsApp link with prefilled message and newlines
+  const returnPhone = '917736166728' // international format without +
+  const prefilledMessage = [
+    '#Return Request',
+    `Order: ${orderNumber}`,
+    `Customer: ${customerName}`,
+    'Reason: '
+  ].join('\n')
+  const waReturnLink = `https://wa.me/${returnPhone}?text=${encodeURIComponent(prefilledMessage)}`
+
+  // Shipping address lines
+  const addrLines = [
+    address?.name || customerName,
+    [address?.line1, address?.line2].filter(Boolean).join(', '),
+    [address?.city, address?.state, address?.postalCode].filter(Boolean).join(', '),
+    address?.country,
+    address?.phone ? `Phone: ${address.phone}` : ''
+  ].filter(v => v && String(v).trim().length > 0)
+
   return (
     <div className="po-wrap">
       {/* HEADER */}
-<header className="po-header">
-  <div className="po-container po-headbar">
-    {/* LOGO */}
-    <div className="po-logo-side">
-      <img src={LOGO_URL} alt="Megora Jewels" className="po-logo" />
-    </div>
+      <header className="po-header">
+        <div className="po-container po-headbar">
+          {/* LOGO */}
+          <div className="po-logo-side">
+            <img src={LOGO_URL} alt="Megora Jewels" className="po-logo" />
+          </div>
 
-    {/* BRAND INFO */}
-    <div className="po-brand-side">
-      <div className="po-brand-name">Megora Jewels</div>
-      <div className="po-brand-sub">Exclusive online Store — Shop Anytime Anywhere!</div>
-      <div className="po-brand-sub">
-        <a
-          className="po-site"
-          href="https://megorajewels.com"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          www.megorajewels.com
-        </a>
-      </div>
-    </div>
+          {/* BRAND INFO */}
+          <div className="po-brand-side">
+            <div className="po-brand-name">Megora Jewels</div>
+            <div className="po-brand-sub">Exclusive online Store — Shop Anytime Anywhere!</div>
+            <div className="po-brand-sub">
+              <a
+                className="po-site"
+                href="https://megorajewels.com"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                [www.megorajewels.com](https://www.megorajewels.com)
+              </a>
+            </div>
+          </div>
 
-    {/* ORDER CARD */}
-    <div className="po-order-side">
-      <div className="po-order-card">
-        <div className="po-order-card-row">
-          <span className="po-order-label">Order</span>
-          <span className="po-order-value">#{order.publicId || order.id}</span>
+          {/* ORDER CARD */}
+          <div className="po-order-side">
+            <div className="po-order-card">
+              <div className="po-order-card-row">
+                <span className="po-order-label">Order</span>
+                <span className="po-order-value">#{orderNumber}</span>
+              </div>
+              <div className="po-order-card-row">
+                <span className="po-order-label">Placed</span>
+                <span className="po-order-value">
+                  {placedAtDate ? placedAtDate.toLocaleString() : '-'}
+                </span>
+              </div>
+              <div className="po-order-card-row">
+                <span className="po-order-label">Status</span>
+                <span className="po-status-pill">{order.status}</span>
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="po-order-card-row">
-          <span className="po-order-label">Placed</span>
-          <span className="po-order-value">
-            {placedAtDate ? placedAtDate.toLocaleString() : '-'}
-          </span>
-        </div>
-        <div className="po-order-card-row">
-          <span className="po-order-label">Status</span>
-          <span className="po-status-pill">{order.status}</span>
-        </div>
-      </div>
-    </div>
-  </div>
-</header>
-
+      </header>
 
       {/* MAIN */}
       <main className="po-main">
@@ -186,16 +214,9 @@ export default function PublicOrder() {
                 <div className="po-return-list">
                   <div className="po-return-item">Return must be requested within <strong>24 hours</strong> of delivery.</div>
                   <div className="po-return-item">A clear, continuous open-box video recorded at the time of unboxing is required.</div>
-                  <div className="po-return-item">
-                    Initiate the request on WhatsApp with the order ID and video:&nbsp;
-                    <a href="https://wa.me/917736166728" target="_blank" rel="noopener noreferrer" className="po-link">+91 77361 66728</a>.
-                  </div>
-                  <div className="po-return-item">Item must be unused and in original packaging with all inclusions.</div>
-                  <div className="po-return-item">Approved cases will receive next steps for pickup/return.</div>
-
                   <div className="po-return-cta">
                     <a
-                      href="https://wa.me/917736166728"
+                      href={waReturnLink}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="po-btn-track"
@@ -210,14 +231,14 @@ export default function PublicOrder() {
                   <div className="po-ended-title">Sorry, your return policy period has ended.</div>
                   <div className="po-ended-help">
                     Need help? Chat with support on&nbsp;
-                    <a href="https://wa.me/917736166728" target="_blank" rel="noopener noreferrer" className="po-link">WhatsApp</a>.
+                    <a href={waReturnLink} target="_blank" rel="noopener noreferrer" className="po-link">WhatsApp</a>.
                   </div>
                 </div>
               )}
             </section>
           ) : (
             <>
-              {/* Progress for non-delivered */}
+              {/* Order Progress timeline (includes Out for Delivery) */}
               <section className="po-card">
                 <div className="po-progress-head">
                   <h3 className="po-section-title">Order Progress</h3>
@@ -267,106 +288,100 @@ export default function PublicOrder() {
                 </div>
               </section>
 
-   {/* Tracking OR Delivered Info */}
-{/* Tracking Info (only if not Delivered) */}
-{order.status !== 'Delivered' && canTrack && (
-  <section className="po-card po-track">
-    <div className="po-track-row">
-      <div className="po-track-info">
-        <div className="po-muted">Track your shipment</div>
-        <div className="po-track-meta">
-          {shipping?.courier ? <span>Courier: <strong>{shipping.courier}</strong></span> : null}
-          {shipping?.awb ? <span> • AWB: <strong>{shipping.awb}</strong></span> : null}
-        </div>
-      </div>
-      <div className="po-grow" />
-      <a
-        className="po-btn-track"
-        href={trackingUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        title="Open official courier tracking"
-      >
-        Track Live Location
-      </a>
-    </div>
-
-    {/* Info message */}
-    <div className="po-track-note">
-      Live location updates can be viewed only on the official courier website.
-    </div>
-  </section>
-)}
-
-
+              {/* Live tracking (separate section) */}
+              {canTrack && (
+                <section className="po-card po-track">
+                  <div className="po-track-row">
+                    <div className="po-track-info">
+                      <div className="po-muted">Live tracking</div>
+                      <div className="po-track-meta">
+                        {shipping?.courier ? <span>Courier: <strong>{shipping.courier}</strong></span> : null}
+                        {shipping?.awb ? <span> • AWB: <strong>{shipping.awb}</strong></span> : null}
+                      </div>
+                    </div>
+                    <div className="po-grow" />
+                    <a
+                      className="po-btn-track"
+                      href={trackingUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="Open official courier tracking"
+                    >
+                      Track Live Location
+                    </a>
+                  </div>
+                  <div className="po-track-note">
+                    Live location updates can be viewed only on the official courier website.
+                  </div>
+                </section>
+              )}
             </>
           )}
 
           {/* Items */}
           <section className="po-card">
-  <h3 className="po-section-title">Items</h3>
-  <div className="po-items">
-    {(order.items || []).map((it, i) => (
-      <div key={`${it.sku}-${i}`} className="po-item-card">
-        <div className="po-item-header">
-          <div className="po-thumb">
-            {it.image ? (
-              <img src={it.image} alt={it.name} />
-            ) : (
-              <div className="po-thumb-ph">IMG</div>
-            )}
-          </div>
-          <div className="po-item-info">
-            <div className="po-item-name" title={it.name}>
-              {it.name}
+            <h3 className="po-section-title">Items</h3>
+            <div className="po-items">
+              {(order.items || []).map((it, i) => (
+                <div key={`${it.sku}-${i}`} className="po-item-card">
+                  <div className="po-item-header">
+                    <div className="po-thumb">
+                      {it.image ? (
+                        <img src={it.image} alt={it.name} />
+                      ) : (
+                        <div className="po-thumb-ph">IMG</div>
+                      )}
+                    </div>
+                    <div className="po-item-info">
+                      <div className="po-item-name" title={it.name}>
+                        {it.name}
+                      </div>
+                      <div className="po-muted po-small mono">{it.sku}</div>
+                    </div>
+                  </div>
+
+                  <div className="po-item-details">
+                    <div className="po-detail">
+                      <div className="po-muted">Qty</div>
+                      <div>{Number(it.qty)}</div>
+                    </div>
+                    <div className="po-detail">
+                      <div className="po-muted">Price</div>
+                      <div>{money(it.price)}</div>
+                    </div>
+                    <div className="po-detail">
+                      <div className="po-muted">Line Total</div>
+                      <div className="po-strong">
+                        {money(Number(it.price) * Number(it.qty))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div className="po-muted po-small mono">{it.sku}</div>
-          </div>
-        </div>
 
-        <div className="po-item-details">
-          <div className="po-detail">
-            <div className="po-muted">Qty</div>
-            <div>{Number(it.qty)}</div>
-          </div>
-          <div className="po-detail">
-            <div className="po-muted">Price</div>
-            <div>{money(it.price)}</div>
-          </div>
-          <div className="po-detail">
-            <div className="po-muted">Line Total</div>
-            <div className="po-strong">
-              {money(Number(it.price) * Number(it.qty))}
+            {/* Totals */}
+            <div className="po-totals">
+              <div className="po-tr">
+                <div>Subtotal</div>
+                <div className="right">{money(totals.subtotal)}</div>
+              </div>
+              <div className="po-tr">
+                <div>Shipping</div>
+                <div className="right">{money(totals.shipping)}</div>
+              </div>
+              <div className="po-tr">
+                <div>Discount</div>
+                <div className="right">-{money(totals.discount)}</div>
+              </div>
+              <div className="po-tr grand">
+                <div>Grand Total</div>
+                <div className="right">{money(totals.grandTotal)}</div>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-    ))}
-  </div>
+          </section>
 
-  {/* Totals */}
-  <div className="po-totals">
-    <div className="po-tr">
-      <div>Subtotal</div>
-      <div className="right">{money(totals.subtotal)}</div>
-    </div>
-    <div className="po-tr">
-      <div>Shipping</div>
-      <div className="right">{money(totals.shipping)}</div>
-    </div>
-    <div className="po-tr">
-      <div>Discount</div>
-      <div className="right">-{money(totals.discount)}</div>
-    </div>
-    <div className="po-tr grand">
-      <div>Grand Total</div>
-      <div className="right">{money(totals.grandTotal)}</div>
-    </div>
-  </div>
-</section>
-
-
-          {/* Delivery */}
+          {/* Delivery + Customer Address */}
           <section className="po-card">
             <h3 className="po-section-title">Delivery</h3>
             <div className="po-grid2">
@@ -381,11 +396,19 @@ export default function PublicOrder() {
                   </div>
                 )}
               </div>
-              <div />
+
+              <div className="po-shipbox">
+                <div className="po-muted">Shipping Address</div>
+                <div className="po-strong" style={{ whiteSpace: 'pre-line' }}>
+                 {customerName}
+                 Address: {address}
+                </div>
+              </div>
             </div>
           </section>
         </div>
       </main>
+
 
       <style>{`
         :root {

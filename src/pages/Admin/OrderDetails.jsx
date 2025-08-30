@@ -43,9 +43,9 @@ export default function OrderDetails() {
     return `${location.origin}/o/${pub}`
   }, [order?.publicId, orderId])
 
-  // Flow helper
+  // Flow helper (insert Out for Delivery before Delivered)
   const canAdvance = useMemo(() => {
-    const flow = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Delivered']
+    const flow = ['Received', 'Packed', 'Waiting for Pickup', 'In Transit', 'Out for Delivery', 'Delivered']
     const idx = flow.indexOf(order?.status || '')
     const next = (to) => flow.indexOf(to) > idx
     return { flow, idx, next }
@@ -129,28 +129,24 @@ export default function OrderDetails() {
     setReasonText('')
   }
 
-const saveShipping = async () => {
-  setSavingShip(true)
-  try {
-    // find the courier URL if one is selected
-    const selectedCourier = COURIERS.find(c => c.name === ship.courier)
-
-    const payload = {
-      ...ship,
-      trackingUrl: selectedCourier ? selectedCourier.url : '',
+  const saveShipping = async () => {
+    setSavingShip(true)
+    try {
+      const selectedCourier = COURIERS.find(c => c.name === ship.courier)
+      const payload = {
+        ...ship,
+        trackingUrl: selectedCourier ? selectedCourier.url : '',
+      }
+      await updateOrderShipping(orderId, payload)
+      await reload()
+      showAlert('success', 'Shipping details saved successfully!')
+    } catch (e) {
+      console.error('Update shipping error:', e)
+      showAlert('error', e.message || 'Failed to save shipping')
+    } finally {
+      setSavingShip(false)
     }
-
-    await updateOrderShipping(orderId, payload)
-    await reload()
-    showAlert('success', 'Shipping details saved successfully!')
-  } catch (e) {
-    console.error('Update shipping error:', e)
-    showAlert('error', e.message || 'Failed to save shipping')
-  } finally {
-    setSavingShip(false)
   }
-}
-
 
   const saveEstimated = async () => {
     try {
@@ -218,11 +214,15 @@ const saveShipping = async () => {
           {canAdvance.next('Packed') && <Button onClick={() => move('Packed')}>Mark Packed</Button>}
           {canAdvance.next('Waiting for Pickup') && <Button onClick={() => move('Waiting for Pickup')}>Waiting for Pickup</Button>}
           {canAdvance.next('In Transit') && <Button onClick={() => move('In Transit')}>Mark In Transit</Button>}
+
+          {/* New: Out for Delivery button appears after In Transit and before Delivered */}
+          {canAdvance.next('Out for Delivery') && <Button onClick={() => move('Out for Delivery')}>Mark Out for Delivery</Button>}
+
           {canAdvance.next('Delivered') && <Button onClick={() => move('Delivered')}>Mark Delivered</Button>}
           <button type="button" className="btn-danger" onClick={() => askReasonAndMove('Cancelled')}>Cancel Order</button>
           <button type="button" className="btn-warning" onClick={() => askReasonAndMove('Returned')}>Mark Returned</button>
         </div>
-        <div className="muted">Flow: Received → Packed → Waiting for Pickup → In Transit → Delivered</div>
+        <div className="muted">Flow: Received → Packed → Waiting for Pickup → In Transit → Out for Delivery → Delivered</div>
       </div>
 
       {/* Estimated Delivery */}
@@ -392,13 +392,7 @@ const saveShipping = async () => {
         .timeline { display: grid; gap: 12px; }
         .timeline-item { display: grid; grid-template-columns: 20px 1fr; gap: 12px; }
         .timeline-dot { width: 10px; height: 10px; border-radius: 999px; background: #0ea5e9; }
-       .alert-popup {
-  position: fixed;
-  top: 80px; /* adjust to your Topbar height */
-  right: 20px;
-  z-index: 9999; /* higher than Topbar */
-}
-
+        .alert-popup { position: fixed; top: 80px; right: 20px; z-index: 9999; }
         .alert-box { padding: 10px 16px; border-radius: 8px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.15); animation: fadeInOut 2.5s forwards; }
         .alert-box.success { background: #dcfce7; color: #166534; border: 1px solid #22c55e; }
         .alert-box.error { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; }
