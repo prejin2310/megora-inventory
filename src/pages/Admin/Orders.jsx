@@ -11,32 +11,21 @@ import { resolveCustomerNames } from '../../firebase/firestore'
 // Toggle to show/hide Created At column
 const SHOW_CREATED_AT = false
 
-// Status color map
+// Tailwind status color map
 const STATUS_STYLE = {
-  'Received':            { color: '#0ea5e9', bg: '#eff6ff', border: '#dbeafe' },
-  'Packed':              { color: '#6366f1', bg: '#eef2ff', border: '#e0e7ff' },
-  'Waiting for Pickup':  { color: '#f59e0b', bg: '#fffbeb', border: '#fef3c7' },
-  'In Transit':          { color: '#16a34a', bg: '#ecfdf5', border: '#bbf7d0' },
-  'Delivered':           { color: '#475569', bg: '#f1f5f9', border: '#e2e8f0' },
-  'Cancelled':           { color: '#ef4444', bg: '#fef2f2', border: '#fecaca' },
-  'Returned':            { color: '#f97316', bg: '#fff7ed', border: '#fed7aa' },
+  'Received':            'text-sky-600 bg-sky-50 border border-sky-200',
+  'Packed':              'text-indigo-600 bg-indigo-50 border border-indigo-200',
+  'Waiting for Pickup':  'text-amber-600 bg-amber-50 border border-amber-200',
+  'In Transit':          'text-green-600 bg-green-50 border border-green-200',
+  'Delivered':           'text-slate-600 bg-slate-50 border border-slate-200',
+  'Cancelled':           'text-red-600 bg-red-50 border border-red-200',
+  'Returned':            'text-orange-600 bg-orange-50 border border-orange-200',
 }
 
 function StatusPill({ text }) {
-  const s = STATUS_STYLE[text] || { color: '#475569', bg: '#f1f5f9', border: '#e2e8f0' }
+  const cls = STATUS_STYLE[text] || 'text-slate-600 bg-slate-50 border border-slate-200'
   return (
-    <span
-      style={{
-        display: 'inline-block',
-        padding: '3px 10px',
-        borderRadius: 999,
-        fontWeight: 600,
-        color: s.color,
-        background: s.bg,
-        border: `1px solid ${s.border}`,
-        fontSize: 12,
-      }}
-    >
+    <span className={`inline-block px-3 py-1 rounded-full text-xs font-semibold ${cls}`}>
       {text}
     </span>
   )
@@ -129,7 +118,11 @@ export default function Orders() {
       })()
 
       const baseCells = [
-        <button key={`open-${o.id}`} className="linklike" onClick={() => nav(`/admin/orders/${o.id}`)}>
+        <button
+          key={`open-${o.id}`}
+          className="text-sky-600 font-semibold hover:underline"
+          onClick={() => nav(`/admin/orders/${o.id}`)}
+        >
           {pub}
         </button>,
         SHOW_CREATED_AT ? createdAtText : null,
@@ -137,12 +130,18 @@ export default function Orders() {
         displayName,
         `₹${Number(o?.totals?.grandTotal || 0).toFixed(2)}`,
         o.channel || '-',
-        <button key={`copy-${o.id}`} className="btn btn-sm" onClick={async () => {
-          try {
-            await navigator.clipboard.writeText(link)
-            alert(`Copied link:\n${link}`)
-          } catch { prompt('Copy link:', link) }
-        }}>Copy</button>,
+        <button
+          key={`copy-${o.id}`}
+          className="px-3 py-1 text-sm rounded bg-gray-100 hover:bg-gray-200"
+          onClick={async () => {
+            try {
+              await navigator.clipboard.writeText(link)
+              alert(`Copied link:\n${link}`)
+            } catch { prompt('Copy link:', link) }
+          }}
+        >
+          Copy
+        </button>,
         <Button size="sm" key={`v-${o.id}`} onClick={() => nav(`/admin/orders/${o.id}`)}>View</Button>,
         <Button size="sm" variant="danger" key={`d-${o.id}`} onClick={() => handleDelete(o.id)}>Delete</Button>,
       ]
@@ -151,29 +150,53 @@ export default function Orders() {
   }, [filtered, nav])
 
   return (
-    <div className="orders-wrapper">
-      {/* Controls row */}
-      <div className="orders-controls">
-        <select value={filter.status} onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}>
+    <div className="flex flex-col gap-6">
+      {/* Controls */}
+      <div className="flex flex-wrap items-center gap-3">
+        <select
+          value={filter.status}
+          onChange={e => setFilter(f => ({ ...f, status: e.target.value }))}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
           <option value="">All Status</option>
           {Object.keys(STATUS_STYLE).map(st => <option key={st}>{st}</option>)}
         </select>
-        <select value={filter.channel} onChange={e => setFilter(f => ({ ...f, channel: e.target.value }))}>
+
+        <select
+          value={filter.channel}
+          onChange={e => setFilter(f => ({ ...f, channel: e.target.value }))}
+          className="px-3 py-2 border border-gray-300 rounded-md text-sm"
+        >
           <option value="">All Channels</option>
           <option>WhatsApp</option>
           <option>Instagram</option>
           <option>Manual</option>
         </select>
-        <div className="searchbar">
-          <input placeholder="Search (ID, Public ID, customer, SKU, channel)" value={q} onChange={e => setQ(e.target.value)} />
-          {q && <button className="clear" onClick={() => setQ('')}>×</button>}
+
+        <div className="relative flex-1 min-w-[200px]">
+          <input
+            placeholder="Search (ID, Public ID, customer, SKU, channel)"
+            value={q}
+            onChange={e => setQ(e.target.value)}
+            className="w-full px-3 py-2 pr-8 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none"
+          />
+          {q && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500"
+              onClick={() => setQ('')}
+            >
+              ×
+            </button>
+          )}
         </div>
-        <div className="grow" />
+
+        <div className="flex-1" />
+
         <Button onClick={() => setShowCreate(true)}>Create Order</Button>
         <Button size="sm" onClick={refresh}>Refresh</Button>
       </div>
 
-      {error && <div className="error">{error}</div>}
+      {error && <div className="text-red-600 text-sm">{error}</div>}
 
       {showCreate && (
         <OrderForm
@@ -183,37 +206,14 @@ export default function Orders() {
       )}
 
       {loading ? (
-        <div className="muted">Loading…</div>
+        <div className="text-gray-500">Loading…</div>
       ) : (
-        <div className="table-wrapper">
+        <div className="w-full overflow-x-auto">
+          <div className="w-full">
           <Table columns={columns} rows={rows} />
+          </div>
         </div>
       )}
-
-      <style>{`
-        .orders-wrapper { display: flex; flex-direction: column; gap: 16px; }
-        .orders-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-        .searchbar { position: relative; flex: 1; min-width: 200px; }
-        .searchbar input {
-          width: 100%; padding: 10px 34px 10px 12px;
-          border: 1px solid #e5e7eb; border-radius: 10px; font-size: 14px;
-        }
-        .searchbar .clear {
-          position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
-          width: 26px; height: 26px; border-radius: 999px;
-          background: #f1f5f9; border: 1px solid #e2e8f0;
-          cursor: pointer;
-        }
-        .table-wrapper { width: 100%; overflow-x: auto; }
-        table { width: 100%; min-width: 760px; border-collapse: collapse; }
-        th, td { padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: left; }
-        .linklike { background: transparent; border: 0; color: #0ea5e9; font-weight: 600; cursor: pointer; }
-        .linklike:hover { text-decoration: underline; }
-        @media (max-width: 768px) {
-          .orders-controls { flex-direction: column; align-items: stretch; }
-          .table-wrapper { overflow-x: scroll; }
-        }
-      `}</style>
     </div>
   )
 }

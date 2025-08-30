@@ -1,18 +1,31 @@
-import React from 'react'
+import React from "react"
 
 export default function Table({ columns, rows }) {
   return (
-    <div className="table">
-      <table>
-        <thead>
-          <tr>{columns.map((c, i) => <th key={i}>{c}</th>)}</tr>
-        </thead>
-        <tbody>
-          {rows.map((r, i) => (
-            <tr key={i}>{r.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+    <table className="w-full min-w-full border-collapse text-sm">
+      <thead className="bg-gray-100">
+        <tr>
+          {columns.map((col, idx) => (
+            <th
+              key={idx}
+              className="px-4 py-2 text-left font-semibold text-gray-700 border-b"
+            >
+              {col}
+            </th>
           ))}
-        </tbody>
-      </table>
-    </div>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row, ridx) => (
+          <tr key={ridx} className="hover:bg-gray-50">
+            {row.map((cell, cidx) => (
+              <td key={cidx} className="px-4 py-2 border-b">
+                {cell}
+              </td>
+            ))}
+          </tr>
+        ))}
+      </tbody>
+    </table>
   )
 }
