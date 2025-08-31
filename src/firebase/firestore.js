@@ -345,3 +345,48 @@ export async function updateOrderStatusByPublicId(publicIdOrDocId, status, atDat
     }),
   })
 }
+
+// Add near other imports/exports in src/firebase/firestore.js
+
+export async function getOrderWithCustomer(orderId) {
+  const order = await getOrder(orderId);
+  if (!order) return null;
+
+  // Prefer nested customer on order, then resolve via customerId as fallback
+  const nested = order.customer || {};
+  let resolved = { email: nested.email || "", name: nested.name || "" };
+
+  if ((!resolved.email || !resolved.name) && order.customerId) {
+    try {
+      const c = await getCustomer(order.customerId);
+      if (c) {
+        resolved = {
+          email: resolved.email || c.email || "",
+          name: resolved.name || c.name || "",
+        };
+      }
+    } catch {
+      // ignore resolution errors; UI will handle missing email
+    }
+  }
+
+  // Also check common alternative fields
+  const altEmail =
+    order.email ||
+    order.contactEmail ||
+    order.billing?.email ||
+    "";
+  const altName =
+    order.customerName ||
+    order.billing?.name ||
+    "";
+
+  const _resolvedEmail = resolved.email || altEmail || "";
+  const _resolvedName = resolved.name || altName || "Customer";
+
+  return {
+    ...order,
+    _resolvedEmail,
+    _resolvedName,
+  };
+}
