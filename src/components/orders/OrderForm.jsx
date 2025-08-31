@@ -1,3 +1,4 @@
+// src/pages/Admin/OrderForm.jsx
 import React, { useEffect, useMemo, useState, useId } from 'react'
 import {
   listProducts,
@@ -55,7 +56,7 @@ export default function OrderForm({ onClose, onCreated }) {
   const [newCustomer, setNewCustomer] = useState({ name: '', email: '', phone: '', address: '' })
   const [search, setSearch] = useState('')
   const [selectedProductId, setSelectedProductId] = useState('')
-  const [qty, setQty] = useState(1)
+  const [qty, setQty] = useState('1') // now string for text input
   const [items, setItems] = useState([])
   const [channel, setChannel] = useState('Manual')
   const [notes, setNotes] = useState('')
@@ -101,10 +102,11 @@ export default function OrderForm({ onClose, onCreated }) {
       _origPrice: Number(p.price || 0),
       editing: false,
       productId: p.id || null,
+      image: p.image || '', // ✅ include product image
       key: `${p.id}-${Date.now()}`,
       collapsed: true,
     }]))
-    setQty(1)
+    setQty('1')
     setSelectedProductId('')
   }
 
@@ -151,7 +153,14 @@ export default function OrderForm({ onClose, onCreated }) {
         if (c) customerSnap = { ...c }
       }
 
-      const payloadItems = items.map(it => ({ sku: it.sku, name: it.name, price: it.price, qty: it.qty }))
+      const payloadItems = items.map(it => ({
+        sku: it.sku,
+        name: it.name,
+        price: it.price,
+        qty: it.qty,
+        image: it.image || null, // ✅ save image in order items too
+      }))
+
       const payload = {
         customerId: finalCustomerId,
         customer: customerSnap,
@@ -184,6 +193,7 @@ export default function OrderForm({ onClose, onCreated }) {
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {error && <div className="text-red-600 text-sm">{error}</div>}
 
+          {/* Customer */}
           <AccordionSection title="Customer" defaultOpen>
             <select className="w-full border rounded-lg p-2 mb-2" value={customerId} onChange={e => setCustomerId(e.target.value)}>
               <option value="">Select existing</option>
@@ -197,6 +207,7 @@ export default function OrderForm({ onClose, onCreated }) {
             <input className="w-full border rounded-lg p-2" placeholder="Address" value={newCustomer.address} onChange={e => setNewCustomer(s => ({ ...s, address: e.target.value }))} />
           </AccordionSection>
 
+          {/* Items */}
           <AccordionSection title="Items" defaultOpen>
             <input className="w-full border rounded-lg p-2 mb-2" placeholder="Search product" value={search} onChange={e => setSearch(e.target.value)} />
             <div className="flex gap-2 mb-2">
@@ -206,45 +217,51 @@ export default function OrderForm({ onClose, onCreated }) {
                   <option key={p.id} value={p.id}>{p.sku} — {p.name} (₹{p.price})</option>
                 ))}
               </select>
-              <input type="number" className="w-20 border rounded-lg p-2" value={qty} onChange={e => setQty(e.target.value)} />
+              <input type="text" className="w-20 border rounded-lg p-2" value={qty} onChange={e => setQty(e.target.value)} />
               <Button onClick={addItem} disabled={!selectedProductId}>Add</Button>
             </div>
             {items.map(it => (
-              <div key={it.key} className="border rounded-lg p-3 mb-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <div className="font-medium">{it.name}</div>
-                    <div className="text-sm text-gray-500">Qty: {it.qty} × ₹{it.price}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    {!it.editing ? (
-                      <>
-                        <div className="text-sm font-medium">₹{Number(it.price).toFixed(2)}</div>
-                        <button className="text-blue-600 text-sm" onClick={() => toggleEditPrice(it.key, true)}>Edit</button>
-                      </>
-                    ) : (
-                      <>
-                        <input type="number" className="w-20 border rounded-lg p-1 text-sm" value={it.price} onChange={e => changePrice(it.key, e.target.value)} />
-                        <button className="text-green-600 text-sm" onClick={() => savePrice(it.key)}>Save</button>
-                        <button className="text-gray-500 text-sm" onClick={() => cancelPrice(it.key)}>Cancel</button>
-                      </>
-                    )}
-                    <button className="text-red-600 text-sm" onClick={() => removeItem(it.key)}>Remove</button>
-                  </div>
+              <div key={it.key} className="border rounded-lg p-3 mb-2 flex items-center gap-3">
+                {/* ✅ show image */}
+                {it.image ? (
+                  <img src={it.image} alt={it.name} className="w-12 h-12 rounded object-cover" />
+                ) : (
+                  <div className="w-12 h-12 bg-gray-200 flex items-center justify-center rounded text-gray-500">📦</div>
+                )}
+                <div className="flex-1">
+                  <div className="font-medium">{it.name}</div>
+                  <div className="text-sm text-gray-500">Qty: {it.qty} × ₹{it.price}</div>
+                </div>
+                <div className="flex gap-2 items-center">
+                  {!it.editing ? (
+                    <>
+                      <div className="text-sm font-medium">₹{Number(it.price).toFixed(2)}</div>
+                      <button className="text-blue-600 text-sm" onClick={() => toggleEditPrice(it.key, true)}>Edit</button>
+                    </>
+                  ) : (
+                    <>
+                      <input type="text" className="w-20 border rounded-lg p-1 text-sm" value={it.price} onChange={e => changePrice(it.key, e.target.value)} />
+                      <button className="text-green-600 text-sm" onClick={() => savePrice(it.key)}>Save</button>
+                      <button className="text-gray-500 text-sm" onClick={() => cancelPrice(it.key)}>Cancel</button>
+                    </>
+                  )}
+                  <button className="text-red-600 text-sm" onClick={() => removeItem(it.key)}>Remove</button>
                 </div>
               </div>
             ))}
           </AccordionSection>
 
+          {/* Totals */}
           <AccordionSection title="Totals">
             <div className="grid grid-cols-2 gap-2">
-              <input className="border rounded-lg p-2" placeholder="Shipping" type="number" value={shipAmount} onChange={e => setShipAmount(e.target.value)} />
-              <input className="border rounded-lg p-2" placeholder="Discount" type="number" value={discAmount} onChange={e => setDiscAmount(e.target.value)} />
+              <input className="border rounded-lg p-2" placeholder="Shipping" type="text" value={shipAmount} onChange={e => setShipAmount(e.target.value)} />
+              <input className="border rounded-lg p-2" placeholder="Discount" type="text" value={discAmount} onChange={e => setDiscAmount(e.target.value)} />
               <div className="font-medium col-span-2">Subtotal: ₹{subtotal.toFixed(2)}</div>
               <div className="font-semibold col-span-2">Grand Total: ₹{grandTotal.toFixed(2)}</div>
             </div>
           </AccordionSection>
 
+          {/* Payment */}
           <AccordionSection title="Payment">
             <select className="border rounded-lg p-2 mb-2 w-full" value={payMode} onChange={e => setPayMode(e.target.value)}>
               <option>COD</option><option>UPI</option><option>Card</option>
@@ -255,6 +272,7 @@ export default function OrderForm({ onClose, onCreated }) {
             <input className="border rounded-lg p-2 w-full" placeholder="TXN ID" value={payTxn} onChange={e => setPayTxn(e.target.value)} />
           </AccordionSection>
 
+          {/* Order Channel */}
           <AccordionSection title="Order Channel">
             <select className="border rounded-lg p-2 mb-2 w-full" value={channel} onChange={e => setChannel(e.target.value)}>
               <option>Manual</option>
