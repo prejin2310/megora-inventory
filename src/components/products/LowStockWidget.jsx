@@ -183,66 +183,67 @@ const exportPDF = async () => {
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No products in this list.</div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="min-w-full border rounded-lg text-sm divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">Stock</th>
-                <th className="px-3 py-2 text-left font-medium text-gray-700">Min Stock</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {rows.map(p => {
-                const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
-                const stock = Number(p.stock ?? 0)
-                const isEditing = editing[p.id]
-                return (
-                  <tr key={p.id}>
-                    <td className="px-3 py-2 font-mono">{p.sku || '-'}</td>
-                    <td className="px-3 py-2 truncate">{p.name || '-'}</td>
-                    <td className="px-3 py-2">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          className="border px-2 py-1 rounded w-20"
-                          value={editValues[p.id].stock}
-                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], stock: e.target.value } }))}
-                        />
-                      ) : (
-                        <span className={stockClass(stock, min)}>{stock}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2">
-                      {isEditing ? (
-                        <input
-                          type="number"
-                          className="border px-2 py-1 rounded w-20"
-                          value={editValues[p.id].minStock}
-                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], minStock: e.target.value } }))}
-                        />
-                      ) : (
-                        <span className="text-gray-500">{min}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-right space-x-1">
-                      {isEditing ? (
-                        <>
-                          <Button size="sm" onClick={() => saveEdit(p)}>Save</Button>
-                          <Button size="sm" onClick={cancelEdit} className="bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</Button>
-                        </>
-                      ) : (
-                        <Button size="sm" onClick={() => startEdit(p)}>Edit</Button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+       <div className="overflow-x-auto">
+  <table className="min-w-full text-sm text-gray-700">
+    <thead className="bg-gray-50">
+      <tr>
+        <th className="px-4 py-2 text-left font-semibold">SKU</th>
+        <th className="px-4 py-2 text-left font-semibold">Name</th>
+        <th className="px-4 py-2 text-left font-semibold">Stock</th>
+        <th className="px-4 py-2 text-left font-semibold">Min Stock</th>
+        <th className="px-4 py-2"></th>
+      </tr>
+    </thead>
+    <tbody className="bg-white divide-y divide-gray-100">
+      {rows.map(p => {
+        const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
+        const stock = Number(p.stock ?? 0)
+        const isEditing = editing[p.id]
+        return (
+          <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
+            <td className="px-4 py-2 font-mono">{p.sku || '-'}</td>
+            <td className="px-4 py-2 truncate">{p.name || '-'}</td>
+            <td className="px-4 py-2">
+              {isEditing ? (
+                <input
+                  type="number"
+                  className="border px-2 py-1 rounded w-20"
+                  value={editValues[p.id].stock}
+                  onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], stock: e.target.value } }))}
+                />
+              ) : (
+                <span className={stockClass(stock, min)}>{stock}</span>
+              )}
+            </td>
+            <td className="px-4 py-2">
+              {isEditing ? (
+                <input
+                  type="number"
+                  className="border px-2 py-1 rounded w-20"
+                  value={editValues[p.id].minStock}
+                  onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], minStock: e.target.value } }))}
+                />
+              ) : (
+                <span className="text-gray-500">{min}</span>
+              )}
+            </td>
+            <td className="px-4 py-2 text-right space-x-1">
+              {isEditing ? (
+                <>
+                  <Button size="sm" onClick={() => saveEdit(p)}>Save</Button>
+                  <Button size="sm" onClick={cancelEdit} className="bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</Button>
+                </>
+              ) : (
+                <Button size="sm" onClick={() => startEdit(p)}>Edit</Button>
+              )}
+            </td>
+          </tr>
+        )
+      })}
+    </tbody>
+  </table>
+</div>
+
       )}
 
       {/* Critical Modal */}
