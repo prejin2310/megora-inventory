@@ -1,11 +1,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
-import Input from '../components/ui/Input'
 import Button from '../components/ui/Button'
-import Card from '../components/ui/Card'
 
-const BRAND_GREEN = '#024F3D'
 const LOGO_URL = 'https://i.ibb.co/5XLbs6Pr/Megora-Gold.png'
 
 export default function Login() {
@@ -25,15 +22,8 @@ export default function Login() {
     setLoading(true)
     try {
       await login(email, password || '987Megora123')
-      if (remember) {
-        try {
-          localStorage.setItem('remember', '1')
-        } catch {}
-      } else {
-        try {
-          localStorage.removeItem('remember')
-        } catch {}
-      }
+      if (remember) localStorage.setItem('remember', '1')
+      else localStorage.removeItem('remember')
       nav('/admin', { replace: true })
     } catch (err) {
       setError(err?.message || 'Failed to sign in')
@@ -43,99 +33,110 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center px-3 py-7 bg-[radial-gradient(900px_480px_at_10%_-10%,rgba(2,79,61,0.06),transparent_50%)] bg-[#f5f7fb]">
-      <Card className="w-full max-w-2xl">
-        {/* Brand header */}
-        <div className="grid place-items-center gap-1.5 pb-2 mb-3 border-b border-gray-200">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-emerald-100 px-4">
+      <div className="w-full max-w-md bg-white/80 backdrop-blur-xl shadow-2xl rounded-2xl p-8 border border-gray-100">
+        
+        {/* Logo & Brand */}
+        <div className="flex flex-col items-center mb-6">
           <img
-            className="w-20 h-20 object-contain drop-shadow-lg"
             src={LOGO_URL}
             alt="Megora Jewels"
+            className="w-20 h-20 object-contain drop-shadow-md"
           />
-          <div className="font-extrabold tracking-wide text-lg text-slate-900">
+          <h1 className="mt-3 text-2xl font-extrabold text-slate-900 tracking-wide">
             Megora Jewels
-          </div>
-          <div className="text-sm text-gray-500">Admin Login</div>
+          </h1>
+          <p className="text-gray-500 text-sm">Admin Login</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={onSubmit} className="space-y-4">
-          {error && (
-            <div
-              className="bg-red-50 text-red-700 border border-red-200 px-3 py-2 rounded-lg text-sm"
-              role="alert"
-            >
-              {error}
-            </div>
-          )}
+        {/* Error Alert */}
+        {error && (
+          <div className="bg-red-50 text-red-700 border border-red-200 px-3 py-2 mb-4 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
 
+        {/* Form */}
+        <form onSubmit={onSubmit} className="space-y-5">
+          
           {/* Email */}
           <div className="space-y-1.5">
             <label
               htmlFor="email"
-              className="text-sm font-medium text-gray-600"
+              className="block text-sm font-medium text-gray-700"
             >
-              Email
+              Email Address
             </label>
-            <Input
+            <input
               id="email"
+              type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="name@example.com"
               autoComplete="email"
+              className="w-full px-4 py-3 border border-gray-300 rounded-xl 
+                         focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 
+                         transition bg-white"
             />
           </div>
 
-          {/* Password with toggle */}
+          {/* Password */}
           <div className="space-y-1.5">
             <label
               htmlFor="password"
-              className="text-sm font-medium text-gray-600"
+              className="block text-sm font-medium text-gray-700"
             >
               Password
             </label>
             <div className="relative">
-              <Input
+              <input
                 id="password"
                 type={showPass ? 'text' : 'password'}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="Enter your password"
                 autoComplete="current-password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl 
+                           focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 
+                           transition bg-white"
               />
               <button
                 type="button"
                 onClick={() => setShowPass((s) => !s)}
-                aria-label={showPass ? 'Hide password' : 'Show password'}
-                title={showPass ? 'Hide password' : 'Show password'}
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-[BRAND_GREEN] font-bold text-sm px-2 py-1 rounded-md hover:bg-green-100"
-                style={{ color: BRAND_GREEN }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-sm 
+                           text-emerald-700 hover:text-emerald-900 font-medium"
               >
                 {showPass ? 'Hide' : 'Show'}
               </button>
             </div>
           </div>
 
-          {/* Remember me */}
-          <div className="flex items-center gap-2 text-sm text-slate-800">
-            <label className="flex items-center gap-2">
+          {/* Remember Me */}
+          <div className="flex items-center justify-between text-sm">
+            <label className="flex items-center gap-2 text-gray-700">
               <input
                 type="checkbox"
                 checked={remember}
                 onChange={(e) => setRemember(e.target.checked)}
-                className="rounded border-gray-300 text-[BRAND_GREEN] focus:ring-[BRAND_GREEN]"
-                style={{ accentColor: BRAND_GREEN }}
+                className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
               />
-              <span>Remember me</span>
+              Remember me
             </label>
+            <a href="#" className="text-emerald-700 hover:underline font-medium">
+              Forgot Password?
+            </a>
           </div>
 
           {/* Submit */}
-          <Button type="submit" disabled={loading} className="w-full">
+          <Button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl shadow-md font-semibold transition disabled:opacity-60"
+          >
             {loading ? 'Signing in…' : 'Sign In'}
           </Button>
         </form>
-      </Card>
+      </div>
     </div>
   )
 }

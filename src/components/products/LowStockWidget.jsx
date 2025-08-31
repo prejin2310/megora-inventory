@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { listProducts, updateProductStock } from '../../firebase/firestore'
 import Button from '../ui/Button'
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
 
 const DEFAULT_MIN_STOCK = 4
 
@@ -10,8 +12,9 @@ export default function LowStockWidget() {
   const [error, setError] = useState('')
   const [tab, setTab] = useState('LOW')
   const [restocking, setRestocking] = useState({})
-  const [useGridForLow, setUseGridForLow] = useState(true)
   const [showCriticalModal, setShowCriticalModal] = useState(false)
+  const [editing, setEditing] = useState({}) // Track which row is being edited
+  const [editValues, setEditValues] = useState({}) // Track input values
 
   const refresh = async () => {
     setError('')
@@ -50,40 +53,32 @@ export default function LowStockWidget() {
   }, [products])
 
   useEffect(() => {
-    if (criticalList.length > 0) {
-      setShowCriticalModal(true)
-    }
+    if (criticalList.length > 0) setShowCriticalModal(true)
   }, [criticalList.length])
-
-  // ✅ default to table view on mobile
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth <= 767) {
-        setUseGridForLow(false)
-      } else {
-        setUseGridForLow(true)
-      }
-    }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
-  }, [])
 
   const rows = tab === 'LOW' ? lowList : outList
   const title = tab === 'LOW' ? 'Low Stock' : 'Out of Stock'
 
-  const restock = async (p) => {
-    const current = Number(p.stock ?? 0)
-    const val = prompt(`Enter new stock for ${p.sku || p.name} (current: ${current})`, String(Math.max(current, 10)))
-    if (val == null) return
-    const to = Number(val)
-    if (Number.isNaN(to) || to < 0) return alert('Invalid stock value')
+  const startEdit = (p) => {
+    setEditing({ [p.id]: true })
+    setEditValues({ [p.id]: { stock: p.stock ?? 0, minStock: p.minStock ?? DEFAULT_MIN_STOCK } })
+  }
+
+  const cancelEdit = () => {
+    setEditing({})
+    setEditValues({})
+  }
+
+  const saveEdit = async (p) => {
+    const { stock, minStock } = editValues[p.id]
+    if (stock < 0 || minStock < 0) return alert('Values cannot be negative')
     setRestocking(s => ({ ...s, [p.id]: true }))
     try {
-      await updateProductStock(p.id, { setTo: to })
+      await updateProductStock(p.id, { setTo: Number(stock), minStock: Number(minStock) })
       await refresh()
+      cancelEdit()
     } catch (e) {
-      console.error('Restock error:', e)
+      console.error('Update error:', e)
       alert(e.message || 'Failed to update stock')
     } finally {
       setRestocking(s => ({ ...s, [p.id]: false }))
@@ -96,13 +91,74 @@ export default function LowStockWidget() {
     return 'bg-green-100 text-green-700 font-semibold px-2 py-1 rounded'
   }
 
+  // Utility to convert image URL to base64
+const getBase64FromUrl = async (url) => {
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+const exportPDF = async () => {
+  try {
+    const doc = new jsPDF()
+    const now = new Date()
+    const dateStr = now.toLocaleString()
+    const logoUrl = 'https://i.ibb.co/hRzSG3r0/webGold.png'
+    const logoBase64 = await getBase64FromUrl(logoUrl)
+    const pageWidth = doc.internal.pageSize.getWidth()
+
+    // Header
+    if (logoBase64) {
+      doc.addImage(logoBase64, 'PNG', 15, 10, 30, 15) // x, y, width, height
+    }
+    doc.setFontSize(16)
+    doc.setFont('helvetica', 'bold')
+    doc.text("Megora Jewels", pageWidth / 2, 15, { align: 'center' })
+    doc.setFontSize(10)
+    doc.setFont('helvetica', 'normal')
+    doc.text(`Report: ${title}`, pageWidth / 2, 22, { align: 'center' })
+    doc.text(`Date: ${dateStr}`, pageWidth - 15, 22, { align: 'right' })
+
+    // Table
+    const tableColumn = ["SKU", "Name", "Stock", "Min Stock"]
+    const tableRows = rows.map(p => [
+      p.sku || '-',
+      p.name || '-',
+      p.stock ?? 0,
+      p.minStock ?? DEFAULT_MIN_STOCK
+    ])
+
+    autoTable(doc, {
+      head: [tableColumn],
+      body: tableRows,
+      startY: 30,
+      theme: 'grid',
+      headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0] },
+      styles: { fontSize: 9 },
+    })
+
+    doc.save(`${title.replace(/\s+/g, '_')}_${now.getTime()}.pdf`)
+  } catch (e) {
+    console.error('PDF export failed', e)
+    alert('Failed to export PDF')
+  }
+}
+
+
+
+
+
   return (
     <div className="bg-white border rounded-xl shadow-sm p-4 flex flex-col gap-4">
       {/* Header */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <h3 className="text-lg font-bold">{title}</h3>
         <div className="flex-1" />
-        {/* Segmented Control */}
         <div className="inline-flex bg-gray-100 rounded-full p-1 text-sm">
           <button
             className={`px-3 py-1 rounded-full ${tab === 'LOW' ? 'bg-white shadow font-semibold' : 'text-gray-600'}`}
@@ -117,89 +173,76 @@ export default function LowStockWidget() {
             Out of Stock
           </button>
         </div>
-        {tab === 'LOW' && (
-          <button
-            type="button"
-            onClick={() => setUseGridForLow(v => !v)}
-            className="border rounded-full px-3 py-1 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            {useGridForLow ? 'Table View' : 'Grid View'}
-          </button>
-        )}
-        <Button size="sm">Export PDF</Button>
+        <Button size="sm" onClick={exportPDF}>Export PDF</Button>
       </div>
 
-      {/* Body */}
+      {/* Table */}
       {error && <div className="text-red-600 text-sm">{error}</div>}
       {loading ? (
         <div className="text-gray-500 text-sm">Loading…</div>
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No products in this list.</div>
       ) : (
-        <>
-          {tab === 'LOW' && useGridForLow ? (
-            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4">
-              {lowList.map(p => {
+        <div className="overflow-x-auto">
+          <table className="min-w-full border rounded-lg text-sm divide-y divide-gray-200">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">SKU</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Name</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Stock</th>
+                <th className="px-3 py-2 text-left font-medium text-gray-700">Min Stock</th>
+                <th className="px-3 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {rows.map(p => {
                 const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
                 const stock = Number(p.stock ?? 0)
+                const isEditing = editing[p.id]
                 return (
-                  <div key={p.id} className="border rounded-lg p-3 bg-white flex flex-col gap-2 shadow-sm">
-                    <div>
-                      <div className="font-bold truncate">{p.name || '-'}</div>
-                      <div className="text-xs text-gray-500">{p.sku || '-'}</div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <div className="text-gray-500">Stock</div>
-                        <div className="font-bold">{stock}</div>
-                      </div>
-                      <div>
-                        <div className="text-gray-500">Min</div>
-                        <div>{min}</div>
-                      </div>
-                    </div>
-                    <div className="flex justify-end">
-                      <Button size="sm" onClick={() => restock(p)} disabled={!!restocking[p.id]}>
-                        {restocking[p.id] ? 'Updating…' : 'Restock'}
-                      </Button>
-                    </div>
-                  </div>
+                  <tr key={p.id}>
+                    <td className="px-3 py-2 font-mono">{p.sku || '-'}</td>
+                    <td className="px-3 py-2 truncate">{p.name || '-'}</td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          className="border px-2 py-1 rounded w-20"
+                          value={editValues[p.id].stock}
+                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], stock: e.target.value } }))}
+                        />
+                      ) : (
+                        <span className={stockClass(stock, min)}>{stock}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          className="border px-2 py-1 rounded w-20"
+                          value={editValues[p.id].minStock}
+                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], minStock: e.target.value } }))}
+                        />
+                      ) : (
+                        <span className="text-gray-500">{min}</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right space-x-1">
+                      {isEditing ? (
+                        <>
+                          <Button size="sm" onClick={() => saveEdit(p)}>Save</Button>
+                          <Button size="sm" onClick={cancelEdit} className="bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</Button>
+                        </>
+                      ) : (
+                        <Button size="sm" onClick={() => startEdit(p)}>Edit</Button>
+                      )}
+                    </td>
+                  </tr>
                 )
               })}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-[600px] border rounded-lg">
-                <div className="grid grid-cols-[120px_1fr_90px_70px_120px] gap-3 items-center bg-gray-50 px-3 py-2 font-semibold text-sm">
-                  <div>SKU</div>
-                  <div>Name</div>
-                  <div>Stock</div>
-                  <div>Min</div>
-                  <div></div>
-                </div>
-                <div>
-                  {rows.map(p => {
-                    const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
-                    const stock = Number(p.stock ?? 0)
-                    return (
-                      <div key={p.id} className="grid grid-cols-[120px_1fr_90px_70px_120px] gap-3 items-center px-3 py-2 border-t text-sm">
-                        <div className="font-mono text-xs">{p.sku || '-'}</div>
-                        <div className="truncate">{p.name || '-'}</div>
-                        <div className={stockClass(stock, min)}>{stock}</div>
-                        <div className="text-gray-500">{min}</div>
-                        <div className="text-right">
-                          <Button size="sm" onClick={() => restock(p)} disabled={!!restocking[p.id]}>
-                            {restocking[p.id] ? 'Updating…' : 'Restock'}
-                          </Button>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
-        </>
+            </tbody>
+          </table>
+        </div>
       )}
 
       {/* Critical Modal */}
@@ -215,9 +258,7 @@ export default function LowStockWidget() {
               ))}
             </ul>
             <div className="text-right mt-4">
-              <Button size="sm" onClick={() => setShowCriticalModal(false)}>
-                Dismiss
-              </Button>
+              <Button size="sm" onClick={() => setShowCriticalModal(false)}>Dismiss</Button>
             </div>
           </div>
         </div>
