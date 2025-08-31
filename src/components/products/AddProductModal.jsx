@@ -120,21 +120,21 @@ export default function AddProductModal({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-slate-900/60 p-4">
-      <div className="w-full max-w-3xl rounded-xl border border-gray-200 bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-2 sm:p-4">
+      <div className="w-full h-full md:h-auto max-w-3xl flex flex-col rounded-none md:rounded-2xl bg-white shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
-          <h2 className="text-lg font-bold">Add Product</h2>
+        <div className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-lg font-bold text-gray-800">Add Product</h2>
           <button
             onClick={onClose}
-            className="ml-auto h-7 w-7 rounded-md border border-gray-300 bg-slate-100 text-lg leading-none hover:bg-slate-200"
+            className="h-8 w-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200"
           >
             ×
           </button>
         </div>
 
-        {/* Form */}
-        <form onSubmit={submit} className="grid gap-4 p-4">
+        {/* Form (scrollable body) */}
+        <form onSubmit={submit} className="flex-1 overflow-y-auto p-4 space-y-4">
           {error && (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -304,17 +304,27 @@ export default function AddProductModal({
               </div>
             </div>
           </div>
-
-          {/* Footer */}
-          <div className="mt-2 flex justify-end gap-2">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={!canSave}>
-              {saving ? "Saving…" : "Create"}
-            </Button>
-          </div>
         </form>
+
+        {/* Sticky Footer */}
+        <div className="flex justify-end gap-2 border-t bg-white px-4 py-3">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            className="px-4 py-2 rounded-lg bg-gray-200 text-gray-700 hover:bg-gray-300"
+          >
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            disabled={!canSave}
+            className="px-4 py-2 rounded-lg bg-black text-white hover:bg-gray-900 disabled:opacity-50"
+            onClick={submit}
+          >
+            {saving ? "Saving…" : "Create"}
+          </Button>
+        </div>
       </div>
     </div>
   );
