@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react"
 import { useParams } from "react-router-dom"
+import { motion } from "framer-motion"
+import { Truck, Package, Clock, CheckCircle, XCircle, RotateCcw, Link } from "lucide-react"
 import {
   getOrder,
   updateOrderStatus,
@@ -15,6 +17,15 @@ const COURIERS = [
   { name: "Delhivery", url: "https://www.delhivery.com/tracking" },
   { name: "Ecom Express", url: "https://ecomexpress.in/tracking/" },
   { name: "India Post", url: "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx" },
+]
+
+const STATUS_FLOW = [
+  { label: "Received", icon: Package },
+  { label: "Packed", icon: Package },
+  { label: "Waiting for Pickup", icon: Clock },
+  { label: "In Transit", icon: Truck },
+  { label: "Out for Delivery", icon: Truck },
+  { label: "Delivered", icon: CheckCircle },
 ]
 
 export default function OrderDetails() {
@@ -39,7 +50,7 @@ export default function OrderDetails() {
   }, [order?.publicId, orderId])
 
   const canAdvance = useMemo(() => {
-    const flow = ["Received", "Packed", "Waiting for Pickup", "In Transit", "Out for Delivery", "Delivered"]
+    const flow = STATUS_FLOW.map(s => s.label)
     const idx = flow.indexOf(order?.status || "")
     const next = (to) => flow.indexOf(to) > idx
     return { flow, idx, next }
@@ -78,6 +89,58 @@ export default function OrderDetails() {
     setTimeout(() => setAlert({ open: false, type: "", message: "" }), 2500)
   }
 
+  // Progress Timeline Renderer
+  const renderTimeline = () => {
+    const currentIndex = STATUS_FLOW.findIndex(s => s.label === order?.status)
+    return (
+      <div className="flex md:flex-row flex-col items-start md:items-center gap-4 md:gap-6">
+        {STATUS_FLOW.map((step, i) => {
+          const Icon = step.icon
+          const isActive = i <= currentIndex
+          return (
+            <motion.div
+              key={step.label}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: i * 0.1 }}
+              className="flex items-center gap-2"
+            >
+              <div
+                className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+                  isActive ? "bg-green-100 border-green-500 text-green-600" : "bg-gray-100 border-gray-300 text-gray-400"
+                }`}
+              >
+                <Icon size={20} />
+              </div>
+              <span className={`text-sm font-medium ${isActive ? "text-green-700" : "text-gray-500"}`}>
+                {step.label}
+              </span>
+              {i < STATUS_FLOW.length - 1 && (
+                <div className="hidden md:block w-10 h-0.5 bg-gray-300 mx-2"></div>
+              )}
+            </motion.div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  const fmtDateTime = (ts) => {
+    try {
+      const d = ts?.toDate ? ts.toDate() : new Date(ts)
+      return d.toLocaleString()
+    } catch {
+      return String(ts || "-")
+    }
+  }
+
+  if (loading) return <div className="p-4">Loading…</div>
+  if (!order) return <div className="text-red-600">Order not found</div>
+
+  const selectedCourier = COURIERS.find((c) => c.name === ship.courier)
+
+
+    // === ACTION HANDLERS ===
   const move = async (next) => {
     try {
       await updateOrderStatus(orderId, next, `Moved to ${next}`)
@@ -144,22 +207,9 @@ export default function OrderDetails() {
     }
   }
 
-  const fmtDateTime = (ts) => {
-    try {
-      const d = ts?.toDate ? ts.toDate() : new Date(ts)
-      return d.toLocaleString()
-    } catch {
-      return String(ts || "-")
-    }
-  }
-
-  if (loading) return <div className="p-4">Loading…</div>
-  if (!order) return <div className="text-red-600">Order not found</div>
-
-  const selectedCourier = COURIERS.find((c) => c.name === ship.courier)
 
   return (
-    <div className="space-y-4 p-4">
+    <div className="space-y-6 p-4">
       {/* Header */}
       <div className="flex items-center gap-2">
         <h2 className="text-xl font-bold">Order #{order.publicId || order.id}</h2>
@@ -168,46 +218,74 @@ export default function OrderDetails() {
         </span>
       </div>
 
+      {/* Progress Timeline */}
+      <div className="rounded-lg border bg-white p-4 shadow-sm">
+        <h3 className="font-semibold mb-3">Order Progress</h3>
+        {renderTimeline()}
+      </div>
       {/* Share Link */}
       <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
-        <h3 className="font-semibold">Customer Share Link</h3>
-        <div className="flex flex-wrap items-center gap-2">
+        <h3 className="font-semibold flex items-center gap-2">
+          Share Link
+        </h3>
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
-            className="w-full md:w-1/2 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
+            className="flex-1 rounded-md border border-gray-300 bg-gray-50 px-3 py-2 text-sm"
             value={shareLink}
             readOnly
           />
-          <Button size="sm" onClick={copyShare}>Copy link</Button>
+          <Button size="sm" onClick={copyShare} className="flex items-center gap-1">
+            Copy
+          </Button>
         </div>
       </div>
 
-      {/* Status */}
-      <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
+      {/* Status Controls */}
+      <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
         <h3 className="font-semibold">Status</h3>
         <div className="flex flex-wrap gap-2">
-          {canAdvance.next("Packed") && <Button onClick={() => move("Packed")}>Mark Packed</Button>}
-          {canAdvance.next("Waiting for Pickup") && <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>}
-          {canAdvance.next("In Transit") && <Button onClick={() => move("In Transit")}>Mark In Transit</Button>}
-          {canAdvance.next("Out for Delivery") && <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>}
-          {canAdvance.next("Delivered") && <Button onClick={() => move("Delivered")}>Mark Delivered</Button>}
-          <button onClick={() => askReasonAndMove("Cancelled")} className="rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200">Cancel</button>
-          <button onClick={() => askReasonAndMove("Returned")} className="rounded-md border border-yellow-500 bg-yellow-100 px-3 py-1 text-sm font-semibold text-yellow-700 hover:bg-yellow-200">Return</button>
+          {canAdvance.next("Packed") && (
+            <Button onClick={() => move("Packed")}>Mark Packed</Button>
+          )}
+          {canAdvance.next("Waiting for Pickup") && (
+            <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
+          )}
+          {canAdvance.next("In Transit") && (
+            <Button onClick={() => move("In Transit")}>In Transit</Button>
+          )}
+          {canAdvance.next("Out for Delivery") && (
+            <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
+          )}
+          {canAdvance.next("Delivered") && (
+            <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
+          )}
+
+          <button
+            onClick={() => askReasonAndMove("Cancelled")}
+            className="flex items-center gap-1 rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => askReasonAndMove("Returned")}
+            className="flex items-center gap-1 rounded-md border border-yellow-500 bg-yellow-100 px-3 py-1 text-sm font-semibold text-yellow-700 hover:bg-yellow-200"
+          >
+            Return
+          </button>
         </div>
       </div>
 
       {/* Estimated Delivery */}
       <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
         <h3 className="font-semibold">Estimated Delivery</h3>
-        <div className="grid gap-2 md:grid-cols-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="date"
             value={estimatedDelivery?.slice(0, 10) || ""}
             onChange={(e) => setEstimatedDelivery(e.target.value)}
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           />
-          <div className="flex justify-end">
-            <Button onClick={saveEstimated}>Save</Button>
-          </div>
+          <Button onClick={saveEstimated}>Save</Button>
         </div>
       </div>
 
@@ -221,7 +299,11 @@ export default function OrderDetails() {
             className="rounded-md border border-gray-300 px-3 py-2 text-sm"
           >
             <option value="">Select Courier</option>
-            {COURIERS.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+            {COURIERS.map((c) => (
+              <option key={c.name} value={c.name}>
+                {c.name}
+              </option>
+            ))}
           </select>
           <input
             placeholder="AWB / Tracking #"
@@ -244,11 +326,21 @@ export default function OrderDetails() {
         </div>
         {selectedCourier && ship.awb && (
           <p className="text-xs text-gray-500">
-            Track at: <a href={selectedCourier.url} target="_blank" className="text-blue-600 underline">{selectedCourier.url}</a>
+            Track at:{" "}
+            <a
+              href={selectedCourier.url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-blue-600 underline"
+            >
+              {selectedCourier.url}
+            </a>
           </p>
         )}
         <div className="flex justify-end">
-          <Button onClick={saveShipping} disabled={savingShip}>Save</Button>
+          <Button onClick={saveShipping} disabled={savingShip}>
+            Save
+          </Button>
         </div>
       </div>
 
@@ -257,15 +349,26 @@ export default function OrderDetails() {
         <h3 className="font-semibold">Items</h3>
         <div className="grid gap-3 md:grid-cols-2">
           {(order.items || []).map((it, i) => (
-            <div key={`${it.sku}-${i}`} className="flex items-center gap-3 rounded-md border bg-gray-50 p-2">
+            <div
+              key={`${it.sku}-${i}`}
+              className="flex items-center gap-3 rounded-md border bg-gray-50 p-2 hover:shadow-md transition"
+            >
               {it.image ? (
-                <img src={it.image} alt={it.name} className="h-16 w-16 rounded-md border object-cover" />
+                <img
+                  src={it.image}
+                  alt={it.name}
+                  className="h-16 w-16 rounded-md border object-cover"
+                />
               ) : (
-                <div className="h-16 w-16 rounded-md border bg-gray-100 grid place-items-center text-xs text-gray-500">IMG</div>
+                <div className="h-16 w-16 rounded-md border bg-gray-100 grid place-items-center text-xs text-gray-500">
+                  IMG
+                </div>
               )}
               <div className="flex-1">
                 <div className="flex justify-between text-sm">
-                  <span>{it.name} × {it.qty}</span>
+                  <span>
+                    {it.name} × {it.qty}
+                  </span>
                   <span>₹{Number(it.price).toFixed(2)}</span>
                 </div>
                 <p className="text-xs text-gray-500">SKU: {it.sku}</p>
@@ -273,7 +376,7 @@ export default function OrderDetails() {
             </div>
           ))}
         </div>
-        <div className="flex font-semibold justify-between">
+        <div className="flex font-semibold justify-between border-t pt-2">
           <span>Total</span>
           <span>₹{Number(order?.totals?.grandTotal || 0).toFixed(2)}</span>
         </div>
@@ -291,7 +394,16 @@ export default function OrderDetails() {
               <div>
                 <div className="flex justify-between text-sm">
                   <strong>{h.status}</strong>
-                  <span className="text-xs text-gray-500">{fmtDateTime(h.at)}</span>
+                  <span className="text-xs text-gray-500">
+                    {(() => {
+                      try {
+                        const d = h.at?.toDate ? h.at.toDate() : new Date(h.at)
+                        return d.toLocaleString()
+                      } catch {
+                        return String(h.at || "-")
+                      }
+                    })()}
+                  </span>
                 </div>
                 {h.note && <p className="text-xs text-gray-600">{h.note}</p>}
               </div>
@@ -315,13 +427,16 @@ export default function OrderDetails() {
               />
             </div>
             <div className="flex justify-end gap-2 border-t px-4 py-2">
-              <Button variant="ghost" onClick={() => setReasonOpen(false)}>Cancel</Button>
+              <Button variant="ghost" onClick={() => setReasonOpen(false)}>
+                Cancel
+              </Button>
               <button
                 onClick={confirmReasonMove}
-                className={`px-3 py-1 rounded-md font-semibold ${pendingStatus === "Cancelled"
-                  ? "bg-red-100 border border-red-500 text-red-700 hover:bg-red-200"
-                  : "bg-yellow-100 border border-yellow-500 text-yellow-700 hover:bg-yellow-200"
-                  }`}
+                className={`px-3 py-1 rounded-md font-semibold ${
+                  pendingStatus === "Cancelled"
+                    ? "bg-red-100 border border-red-500 text-red-700 hover:bg-red-200"
+                    : "bg-yellow-100 border border-yellow-500 text-yellow-700 hover:bg-yellow-200"
+                }`}
               >
                 Confirm
               </button>
@@ -330,14 +445,16 @@ export default function OrderDetails() {
         </div>
       )}
 
-      {/* Alert */}
+      {/* Toast-like Alert */}
       {alert.open && (
-        <div className="fixed top-20 right-4 z-50 animate-fadeIn">
-          <div className={`px-4 py-2 rounded-md shadow font-semibold ${
-            alert.type === "success"
-              ? "bg-green-100 text-green-700 border border-green-500"
-              : "bg-red-100 text-red-700 border border-red-500"
-          }`}>
+        <div className="fixed top-20 right-4 z-50">
+          <div
+            className={`px-4 py-2 rounded-md shadow font-semibold ${
+              alert.type === "success"
+                ? "bg-green-100 text-green-700 border border-green-500"
+                : "bg-red-100 text-red-700 border border-red-500"
+            }`}
+          >
             {alert.message}
           </div>
         </div>
