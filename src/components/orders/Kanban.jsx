@@ -140,7 +140,7 @@ export default function Kanban({ initialOrders = null }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center">
-        <h3 className="text-xl font-bold text-gray-800">Orders Kanban</h3>
+        <h3 className="text-xl font-bold text-gray-800">Orders Progress</h3>
       </div>
 
       {error && <div className="text-red-600">{error}</div>}

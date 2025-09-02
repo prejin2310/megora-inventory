@@ -25,6 +25,9 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
       <div className="bg-white p-6 rounded-lg shadow-lg max-w-md w-full">
         <h2 className="text-lg font-semibold mb-4">Edit Product</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
+          <label className="text-xs font-medium text-gray-600">
+                Product Name
+              </label>
           <input
             type="text"
             name="name"
@@ -33,6 +36,9 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
+          <label className="text-xs font-medium text-gray-600">
+                SKU
+              </label>
           <input
             type="text"
             name="sku"
@@ -41,6 +47,9 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
+          <label className="text-xs font-medium text-gray-600">
+               Price
+              </label>
           <input
             type="number"
             name="price"
@@ -49,6 +58,9 @@ export default function EditProductModal({ open, onClose, product, onSave }) {
             onChange={handleChange}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg"
           />
+          <label className="text-xs font-medium text-gray-600">
+               Stock
+              </label>
           <input
             type="number"
             name="stock"

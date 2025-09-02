@@ -32,7 +32,7 @@ const BRAND = {
   gradient: "bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-600",
 };
 
-const LOGO_URL = "https://i.ibb.co/hRzSG3r0/webGold.png";
+const LOGO_URL = "https://megorajewels.com/wp-content/uploads/2022/01/megoooraa-e1755842737410.png";
 
 // -------------------- Helpers --------------------
 const toDateObj = (ts) => {
