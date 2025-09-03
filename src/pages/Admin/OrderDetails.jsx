@@ -73,16 +73,32 @@ async function sendOrderProgressEmail(order) {
     to_name: order.customer?.name || order.customerName || "Customer",
     to_email: order.customer?.email || order.customerEmail || "",
     order_id: order.publicId || "",
-    order_status: statusMessage,  // 👈 use friendly text here
-    tracking_url: 'https://megorajewels.netlify.app/o/' + order.publicId || "www.megorajewels.com",
-    items: serializeItems(order.items || [])
-      .map((it) => `${it.name} (x${it.qty}) - ₹${it.price}`)
-      .join("  ") || "No items",
+    order_status: statusMessage, // 👈 use friendly text here
+    tracking_url: order.publicId
+      ? "https://megorajewels.netlify.app/o/" + order.publicId
+      : "https://www.megorajewels.com",
+    items:
+      serializeItems(order.items || [])
+        .map((it) => `${it.name} (x${it.qty}) - ₹${it.price}`)
+        .join("  ") || "No items",
     total: Number(order?.totals?.grandTotal || 0).toFixed(2),
-    courier: order.shipping?.courier || "Courier details will be shared once your order is ready for dispatch.",
-    awb: order.shipping?.awb || "Not Available",
-    discount: order.totals?.discount ? `₹${Number(order.totals.discount).toFixed(2)}` : "₹0.00",
-    shipping: order.totals?.shipping ? `₹${Number(order.totals.shipping).toFixed(2)}` : "₹0.00",
+
+    // ✅ fixed courier/awb fallbacks
+    courier: order.shipping?.courier
+      ? `Courier Agency: ${order.shipping.courier}`
+      : "Courier details will be shared once your order is ready for dispatch.",
+
+    awb: order.shipping?.awb
+      ? `AWB/Reference No: ${order.shipping.awb}`
+      : "—",
+
+    discount: order.totals?.discount
+      ? `${Number(order.totals.discount).toFixed(2)}`
+      : "0.00",
+
+    shipping: order.totals?.shipping
+      ? `${Number(order.totals.shipping).toFixed(2)}`
+      : "0.00",
   };
 
 
@@ -205,16 +221,33 @@ export default function OrderDetails() {
   const selectedCourier = COURIERS.find((c) => c.name === ship.courier);
 
   // === ACTIONS ===
-  const move = async (next) => {
-    try {
-      await updateOrderStatus(orderId, next, `Moved to ${next}`);
-      const updated = await reload();
-      showAlert("success", `Order marked as ${next}`);
-      await sendOrderProgressEmail(updated)
-    } catch (e) {
-      showAlert("error", e.message || "Failed to update status");
+// === ACTIONS ===
+const move = async (next) => {
+  try {
+    // 🔒 Validation before moving to "In Transit"
+    if (next === "In Transit") {
+      if (!estimatedDelivery) {
+        showAlert("error", "Please set the Estimated Delivery date before marking as In Transit.");
+        return;
+      }
+      if (!ship.courier || !ship.awb) {
+        showAlert("error", "Please enter Courier and AWB details before marking as In Transit.");
+        return;
+      }
     }
-  };
+
+    await updateOrderStatus(orderId, next, `Moved to ${next}`);
+    const updated = await reload();
+    showAlert("success", `Order marked as ${next}`);
+
+    // ✅ Only send email when status changes
+    await sendOrderProgressEmail(updated);
+
+  } catch (e) {
+    showAlert("error", e.message || "Failed to update status");
+  }
+};
+
 
   const askReasonAndMove = (next) => {
     setPendingStatus(next);
@@ -306,11 +339,21 @@ export default function OrderDetails() {
       <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
         <h3 className="font-semibold">Status</h3>
         <div className="flex flex-wrap gap-2">
-          {canAdvance.next("Packed") && <Button onClick={() => move("Packed")}>Mark Packed</Button>}
-          {canAdvance.next("Waiting for Pickup") && <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>}
-          {canAdvance.next("In Transit") && <Button onClick={() => move("In Transit")}>In Transit</Button>}
-          {canAdvance.next("Out for Delivery") && <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>}
-          {canAdvance.next("Delivered") && <Button onClick={() => move("Delivered")}>Mark Delivered</Button>}
+          {canAdvance.next("Packed") && (
+    <Button onClick={() => move("Packed")}>Mark Packed</Button>
+  )}
+  {canAdvance.next("Waiting for Pickup") && (
+    <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
+  )}
+  {canAdvance.next("In Transit") && (
+    <Button onClick={() => move("In Transit")}>In Transit</Button>
+  )}
+  {canAdvance.next("Out for Delivery") && (
+    <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
+  )}
+  {canAdvance.next("Delivered") && (
+    <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
+  )}
           <button
             onClick={() => askReasonAndMove("Cancelled")}
             className="flex items-center gap-1 rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200"

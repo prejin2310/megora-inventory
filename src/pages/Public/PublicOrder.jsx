@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   Package,
   Truck,
+  Building ,
   MapPin,
   Calendar,
   Clock,
@@ -67,7 +68,7 @@ const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
 const FLOW = [
   { key: "Received", label: "Order Received", icon: Package },
   { key: "Packed", label: "Item Packed", icon: BoxIcon },
-  { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Navigation },
+  { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Building  },
   { key: "In Transit", label: "In Transit", icon: Truck },
   { key: "Out for Delivery", label: "Out for Delivery", icon: Navigation },
   { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
@@ -365,122 +366,167 @@ const Header = (
   }
 
   // Timeline row
-  const Timeline = (
-    <div className="rounded-2xl border bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div>
-          <h3 className="font-bold">Order Progress</h3>
-          <p className="text-xs text-slate-500">Follow your order from warehouse to your door.</p>
-        </div>
-        <div className="text-right">
-          <div className="text-xs text-slate-500">Estimated Delivery</div>
-          <div className="text-sm font-semibold">{estDelivery ? fmtDate(estDelivery) : "—"}</div>
-        </div>
+// Timeline row with animations
+const Timeline = (
+  <div className="rounded-2xl border bg-white p-4 shadow-sm">
+    <div className="mb-3 flex items-start justify-between gap-3">
+      <div>
+        <h3 className="font-bold">Order Progress</h3>
+        <p className="text-xs text-slate-500">Follow your order from warehouse to your door.</p>
       </div>
-
-      <div className="grid gap-4">
-        {flow.map((step, idx) => {
-          const Icon = step.icon || Package;
-          const reached = idx <= currentIndex;
-          const isCurrent = idx === currentIndex;
-          const at = statusTimes[step.key];
-          const dateStr = at ? fmtDate(at) : "-";
-          const timeStr = at ? fmtTime(at) : "-";
-          const showCourierInline = step.key === "In Transit" && reached && (shipping?.courier || shipping?.awb);
-          return (
-            <motion.div
-              key={step.key}
-              initial={{ x: -6, opacity: 0 }}
-              whileInView={{ x: 0, opacity: 1 }}
-              viewport={{ once: true, margin: "-20%" }}
-              transition={{ type: "spring", stiffness: 200, damping: 20 }}
-              className="relative grid grid-cols-[28px_1fr] items-start gap-3"
-            >
-              {/* Rail */}
-              <div className="relative">
-                <div
-                  className={`relative grid h-7 w-7 place-items-center rounded-full border-2 ${
-                    isCurrent
-                      ? "border-emerald-600 bg-white ring-8 ring-emerald-100"
-                      : reached
-                      ? "border-emerald-500 bg-emerald-50"
-                      : "border-slate-300 bg-white"
-                  }`}
-                >
-                  <Icon className={`h-4 w-4 ${reached ? "text-emerald-600" : "text-slate-400"}`} />
-                </div>
-                {/* Connector */}
-                {idx < flow.length - 1 && (
-                  <div className={`absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 ${reached ? "bg-emerald-200" : "bg-slate-200"}`} />
-                )}
-              </div>
-
-              {/* Content */}
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <div className={`truncate text-sm font-semibold ${reached ? "text-emerald-700" : "text-slate-600"}`}>{step.label}</div>
-                  <div className="text-right text-xs text-slate-500">
-                    <div>{dateStr}</div>
-                    <div>{timeStr}</div>
-                  </div>
-                </div>
-                {showCourierInline && (
-                  <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700">
-                    {shipping?.courier && (
-                      <div>
-                        <span className="text-slate-500">Courier:</span> <span className="font-medium">{shipping.courier}</span>
-                      </div>
-                    )}
-                    {shipping?.awb && (
-                      <div>
-                        <span className="text-slate-500">AWB:</span> <span className="font-medium">{shipping.awb}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          );
-        })}
+      <div className="text-right">
+        <div className="text-xs text-slate-500">Estimated Delivery</div>
+        <div className="text-sm font-semibold">{estDelivery ? fmtDate(estDelivery) : "—"}</div>
       </div>
-
-      {canTrack && (
-        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="text-slate-700">
-              <div className="text-xs text-slate-500">Live tracking</div>
-              <div className="flex flex-wrap items-center gap-2 text-xs">
-                {shipping?.courier && (
-                  <span>
-                    Courier: <strong>{shipping.courier}</strong>
-                  </span>
-                )}
-                {shipping?.awb && (
-                  <span>
-                    • AWB: <strong>{shipping.awb}</strong>
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="grow" />
-           <a
-  className="inline-flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:brightness-95"
-  href={trackingUrl}
-  target="_blank"
-  rel="noreferrer noopener"
-  title="Open official courier tracking"
->
-  <Navigation className="h-4 w-4 text-white" /> Track Live Location
-</a>
-
-          </div>
-          <div className="mt-2 text-xs text-emerald-800/80">
-            Live location updates can be viewed only on the official courier website.
-          </div>
-        </div>
-      )}
     </div>
-  );
+
+    <div className="grid gap-4">
+      {flow.map((step, idx) => {
+        const Icon = step.icon || Package;
+        const reached = idx < currentIndex;
+        const isCurrent = idx === currentIndex;
+        const at = statusTimes[step.key];
+        const dateStr = at ? fmtDate(at) : "-";
+        const timeStr = at ? fmtTime(at) : "-";
+        const showCourierInline = step.key === "In Transit" && reached && (shipping?.courier || shipping?.awb);
+
+        return (
+          <motion.div
+            key={step.key}
+            initial={{ x: -20, opacity: 0 }}
+            whileInView={{ x: 0, opacity: 1 }}
+            viewport={{ once: true, margin: "-20%" }}
+            transition={{ type: "spring", stiffness: 200, damping: 20, delay: idx * 0.1 }}
+            className="relative grid grid-cols-[28px_1fr] items-start gap-3"
+          >
+            {/* Rail Section */}
+            <div className="relative">
+              {/* Connector line behind icons */}
+              {idx < flow.length - 1 && (
+                <motion.div
+                  className="absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 z-0"
+                  initial={{ scaleY: 0 }}
+                  animate={{ scaleY: 1 }}
+                  transition={{ duration: 0.5, delay: idx * 0.1 }}
+                >
+                  {idx < currentIndex ? (
+                    <div className="h-full w-full bg-emerald-200" />
+                  ) : idx === currentIndex ? (
+                    <div className="h-full w-full bg-gradient-to-b from-emerald-400 via-emerald-200 to-emerald-400 animate-pulse" />
+                  ) : (
+                    <div className="h-full w-full bg-slate-200" />
+                  )}
+                </motion.div>
+              )}
+
+              {/* Step Icon */}
+              <motion.div
+                className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border-2 ${
+                  isCurrent
+                    ? "border-emerald-600 bg-white ring-8 ring-emerald-100"
+                    : reached
+                    ? "border-emerald-500 bg-emerald-50"
+                    : "border-slate-300 bg-white"
+                }`}
+                animate={
+                  isCurrent
+                    ? { scale: [1, 1.2, 1] }
+                    : reached
+                    ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 8px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] }
+                    : {}
+                }
+                transition={{
+                  duration: isCurrent ? 1.5 : 1,
+                  repeat: isCurrent ? Infinity : 0,
+                  ease: "easeInOut"
+                }}
+              >
+                <Icon className={`h-4 w-4 ${reached || isCurrent ? "text-emerald-600" : "text-slate-400"}`} />
+              </motion.div>
+            </div>
+
+            {/* Step Content */}
+            <motion.div
+              className="min-w-0"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3, delay: idx * 0.1 }}
+            >
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div className={`truncate text-sm font-semibold ${reached || isCurrent ? "text-emerald-700" : "text-slate-600"}`}>
+                  {step.label}
+                </div>
+                <div className="text-right text-xs text-slate-500">
+                  <div>{dateStr}</div>
+                  <div>{timeStr}</div>
+                </div>
+              </div>
+
+              {/* Courier info fade-in */}
+              {showCourierInline && (
+                <motion.div
+                  className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700"
+                  initial={{ opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  {shipping?.courier && (
+                    <div>
+                      <span className="text-slate-500">Courier:</span> <span className="font-medium">{shipping.courier}</span>
+                    </div>
+                  )}
+                  {shipping?.awb && (
+                    <div>
+                      <span className="text-slate-500">AWB:</span> <span className="font-medium">{shipping.awb}</span>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </motion.div>
+          </motion.div>
+        );
+      })}
+    </div>
+
+    {canTrack && (
+      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="text-slate-700">
+            <div className="text-xs text-slate-500">Live tracking</div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              {shipping?.courier && (
+                <span>
+                  Courier: <strong>{shipping.courier}</strong>
+                </span>
+              )}
+              {shipping?.awb && (
+                <span>
+                  • AWB: <strong>{shipping.awb}</strong>
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="grow" />
+          <a
+            className="inline-flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:brightness-95"
+            href={trackingUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            title="Open official courier tracking"
+          >
+            <Navigation className="h-4 w-4 text-white" /> Track Live Location
+          </a>
+        </div>
+        <div className="mt-2 text-xs text-emerald-800/80">
+          Live location updates can be viewed only on the official courier website.
+        </div>
+      </div>
+    )}
+  </div>
+);
+
+
+
 
   const ReturnPolicy = (
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
