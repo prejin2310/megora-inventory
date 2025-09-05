@@ -28,6 +28,7 @@ const COURIERS = [
   { name: "Delhivery", url: "https://www.delhivery.com/tracking" },
   { name: "Ecom Express", url: "https://ecomexpress.in/tracking/" },
   { name: "India Post", url: "https://www.indiapost.gov.in/_layouts/15/dop.portal.tracking/trackconsignment.aspx" },
+  { name: "Megora Direct", url: "https://www.megorajewels.com" },
 ];
 
 const STATUS_FLOW = [
@@ -40,15 +41,48 @@ const STATUS_FLOW = [
 ];
 
 const STATUS_MESSAGES = {
-  "Received": "We’re excited to let you know that we have received your order. Our team is already preparing your items with care, and we’ll notify you as soon as your order is packed and on its way..",
-  "Packed": "We are pleased to inform you that your order has been packed and is ready for shipment..",
-  "Waiting for Pickup": "We have initiated a pickup request with the courier agency, and your order is currently awaiting collection. Your order is ready to be shipped, and the courier details will be shared with you once the shipment is dispatched.",
-  "In Transit": "Good news! Your order has been dispatched and is now in transit. It is expected to reach your doorstep within 3–7 days.",
-  "Out for Delivery": "Your order is scheduled for delivery by our courier partner. It should reach you soon.",
-  "Delivered": "We’re happy to inform you that your order has been successfully delivered. We hope you are delighted with your purchase! Your feedback is valuable to us, please let us know your thoughts, so we can continue to improve our products and services.",
-  "Cancelled": "Your order has been cancelled. If this wasn’t intentional, please reach out to us.",
-  "Returned": "Your order has been marked as returned. Please contact us for assistance."
+  "Received": {
+    title: "Order received",
+    body: "Thanks for shopping with us—your order has been received and is now being prepared with care.",
+    hint: "A confirmation with packing updates will follow shortly."
+  },
+  "Packed": {
+    title: "Order packed",
+    body: "Great news—your order has been securely packed and is queued for pickup by the courier.",
+    hint: "Tracking details will be shared after dispatch."
+  },
+  "Waiting for Pickup": {
+    title: "Pickup scheduled",
+    body: "A pickup has been initiated with the courier and your parcel is awaiting collection.",
+    hint: "We’ll notify once the shipment is dispatched and tracking is live."
+  },
+  "In Transit": {
+    title: "In Transit",
+    body: "Your package is in transit and making its way through the courier network.",
+    hint: "Estimated delivery is typically within 3–7 days, subject to courier operations."
+  },
+  "Out for Delivery": {
+    title: "Out for delivery",
+    body: "Your package is with the delivery partner and is scheduled to arrive soon.",
+    hint: "Keep the phone available in case the courier needs directions."
+  },
+  "Delivered": {
+    title: "Delivered successfully",
+    body: "The order has been delivered—hope it delights!",
+    hint: "If anything needs attention, reply to this email for quick support."
+  },
+  "Cancelled": {
+    title: "Order cancelled",
+    body: "This order has been cancelled as requested.",
+    hint: "If this was unintended, contact support and we’ll help review options."
+  },
+  "Returned": {
+    title: "Return processed",
+    body: "The order was marked as returned and is being reviewed.",
+    hint: "Our team will follow up with next steps or refund status shortly."
+  }
 };
+
 
 
 const buildStepsString = (currentStatus) => {
@@ -67,26 +101,37 @@ const serializeItems = (items = []) =>
 
 // --- Email sending ---
 async function sendOrderProgressEmail(order) {
-  const statusMessage = STATUS_MESSAGES[order.status] || order.status;
+  const msg = STATUS_MESSAGES[order.status];
+  const title = typeof msg === "string" ? order.status : msg?.title || order.status;
+  const body  = typeof msg === "string" ? msg : msg?.body || "";
+  const hint  = typeof msg === "string" ? ""  : msg?.hint || "";
 
   const templateParams = {
     to_name: order.customer?.name || order.customerName || "Customer",
     to_email: order.customer?.email || order.customerEmail || "",
     order_id: order.publicId || "",
-    order_status: statusMessage, // 👈 use friendly text here
+    // Legacy single-field content (optional to keep)
+    order_status: body || order.status,
+
+    // New fields for the redesigned email
+    order_title: title,
+    order_body: body,
+    order_hint: hint,
+
     tracking_url: order.publicId
       ? "https://megorajewels.netlify.app/o/" + order.publicId
       : "https://www.megorajewels.com",
+
     items:
       serializeItems(order.items || [])
         .map((it) => `${it.name} (x${it.qty}) - ₹${it.price}`)
         .join("  ") || "No items",
+
     total: Number(order?.totals?.grandTotal || 0).toFixed(2),
 
-    // ✅ fixed courier/awb fallbacks
     courier: order.shipping?.courier
       ? `Courier Agency: ${order.shipping.courier}`
-      : "Courier details will be shared once your order is ready for dispatch.",
+      : "Courier details will be shared once the order is ready for dispatch.",
 
     awb: order.shipping?.awb
       ? `AWB/Reference No: ${order.shipping.awb}`
@@ -100,9 +145,6 @@ async function sendOrderProgressEmail(order) {
       ? `${Number(order.totals.shipping).toFixed(2)}`
       : "0.00",
   };
-
-
-  //console.log("Sending EmailJS params:", templateParams);
 
   return emailjs.send(
     EMAILJS_SERVICE_ID,

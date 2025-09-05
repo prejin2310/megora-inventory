@@ -12,21 +12,13 @@ import {
   BadgeCheck,
   Link as LinkIcon,
   ExternalLink,
+  Bike,
   Navigation,
   ShieldCheck,
   Info,
   Phone,
 } from "lucide-react";
 import { getOrderByPublicId } from "../../firebase/firestore";
-
-/**
- * PublicOrder – Neo Redesign
- * Modern, mobile-first, animated order tracker page.
- * - Uses lucide-react icons & framer-motion micro-interactions
- * - TailwindCSS utility classes for styling
- * - Preserves *all* original functionality and data logic
- * - Adds small UX improvements (progress bar, empty states, badges)
- */
 
 const BRAND = {
   green: "#024F3D",
@@ -70,7 +62,13 @@ const FLOW = [
   { key: "Packed", label: "Item Packed", icon: BoxIcon },
   { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Building  },
   { key: "In Transit", label: "In Transit", icon: Truck },
-  { key: "Out for Delivery", label: "Out for Delivery", icon: Navigation },
+  { key: "Out for Delivery", label: "Out for Delivery", icon: Bike },
+  { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
+];
+
+// NEW: Reduced flow to show only Received and Delivered when delivered
+const FLOW_DELIVERED_MIN = [
+  { key: "Received", label: "Order Received", icon: Package },
   { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
 ];
 
@@ -148,6 +146,11 @@ export default function PublicOrderNeo() {
   const estDelivery = order?.estimatedDelivery || shipping?.estimatedDelivery || "";
   const trackingUrl = (shipping?.trackingUrl || "").trim();
   const canTrack = Boolean(trackingUrl);
+
+  // Choose which flow to use in the Timeline
+const isDelivered = order?.status === "Delivered";
+const flowToUse = isDelivered ? FLOW_DELIVERED_MIN : FLOW;
+
 
   // Return policy: 24h from Delivered timestamp
   let returnExpired = false;
@@ -367,12 +370,15 @@ const Header = (
 
   // Timeline row
 // Timeline row with animations
+// Timeline row with animations
 const Timeline = (
   <div className="rounded-2xl border bg-white p-4 shadow-sm">
     <div className="mb-3 flex items-start justify-between gap-3">
       <div>
         <h3 className="font-bold">Order Progress</h3>
-        <p className="text-xs text-slate-500">Follow your order from warehouse to your door.</p>
+        <p className="text-xs text-slate-500">
+          {isDelivered ? "Summary of key milestones." : "Follow your order from warehouse to your door."}
+        </p>
       </div>
       <div className="text-right">
         <div className="text-xs text-slate-500">Estimated Delivery</div>
@@ -381,7 +387,7 @@ const Timeline = (
     </div>
 
     <div className="grid gap-4">
-      {flow.map((step, idx) => {
+      {flowToUse.map((step, idx) => {
         const Icon = step.icon || Package;
         const reached = idx < currentIndex;
         const isCurrent = idx === currentIndex;
@@ -399,10 +405,8 @@ const Timeline = (
             transition={{ type: "spring", stiffness: 200, damping: 20, delay: idx * 0.1 }}
             className="relative grid grid-cols-[28px_1fr] items-start gap-3"
           >
-            {/* Rail Section */}
             <div className="relative">
-              {/* Connector line behind icons */}
-              {idx < flow.length - 1 && (
+              {idx < flowToUse.length - 1 && (
                 <motion.div
                   className="absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 z-0"
                   initial={{ scaleY: 0 }}
@@ -419,7 +423,6 @@ const Timeline = (
                 </motion.div>
               )}
 
-              {/* Step Icon */}
               <motion.div
                 className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border-2 ${
                   isCurrent
@@ -438,14 +441,13 @@ const Timeline = (
                 transition={{
                   duration: isCurrent ? 1.5 : 1,
                   repeat: isCurrent ? Infinity : 0,
-                  ease: "easeInOut"
+                  ease: "easeInOut",
                 }}
               >
                 <Icon className={`h-4 w-4 ${reached || isCurrent ? "text-emerald-600" : "text-slate-400"}`} />
               </motion.div>
             </div>
 
-            {/* Step Content */}
             <motion.div
               className="min-w-0"
               initial={{ opacity: 0, y: 10 }}
@@ -462,8 +464,8 @@ const Timeline = (
                 </div>
               </div>
 
-              {/* Courier info fade-in */}
-              {showCourierInline && (
+              {/* Only show courier inline for non-delivered flow */}
+              {!isDelivered && showCourierInline && (
                 <motion.div
                   className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700"
                   initial={{ opacity: 0, y: 5 }}
@@ -488,7 +490,8 @@ const Timeline = (
       })}
     </div>
 
-    {canTrack && (
+    {/* Keep “Live tracking” only when not delivered */}
+    {!isDelivered && canTrack && (
       <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
         <div className="flex flex-wrap items-center gap-3">
           <div className="text-slate-700">
@@ -517,13 +520,12 @@ const Timeline = (
             <Navigation className="h-4 w-4 text-white" /> Track Live Location
           </a>
         </div>
-        <div className="mt-2 text-xs text-emerald-800/80">
-          Live location updates can be viewed only on the official courier website.
-        </div>
+        <div className="mt-2 text-xs text-emerald-800/80">Live location updates can be viewed only on the official courier website.</div>
       </div>
     )}
   </div>
 );
+
 
 
 
@@ -658,23 +660,15 @@ const Timeline = (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {Header}
 
-      <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
-        {order?.status === "Delivered" ? (
-          <>
-            {Greeting}
-            {ReturnPolicy}
-            {Items}
-            {Delivery}
-          </>
-        ) : (
-          <>
-            {Greeting}
-            {Timeline}
-            {Items}
-            {Delivery}
-          </>
-        )}
-      </main>
+<main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
+  {Greeting}
+  {isDelivered && ReturnPolicy}
+  {Timeline}
+  {Items}
+  {Delivery}
+
+</main>
+
 
       {/* Page footer (subtle) */}
       <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-[11px] text-slate-500">
