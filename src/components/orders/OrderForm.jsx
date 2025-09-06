@@ -25,6 +25,7 @@ import Button from "../ui/Button"
 export default function OrderForm({ open = true, onClose, onCreated }) {
   const [products, setProducts] = useState([])
   const [customers, setCustomers] = useState([])
+  const [itemErrors, setItemErrors] = useState({})
 
   // Customer states
   const [customerId, setCustomerId] = useState("")
@@ -119,6 +120,7 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
       setError("")
       setFormHint("")
       setSaving(false)
+      setItemErrors({})
     }
   }, [open])
 
@@ -298,6 +300,7 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
   const save = async () => {
     setError("")
     setFormHint("")
+    setItemErrors({})
     if (!items.length) {
       setError("Add at least one item")
       return
@@ -320,28 +323,34 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
     }
 
     // 1) Validate inventory before creating order (client-side check)
+    let localItemErrors = {}
     for (const it of items) {
       const p = products.find((x) => x.id === it.productId)
       const wanted = Number(it.qty || 0)
       if (!p) {
-        setError(`Product not found for "${it?.name || it?.sku || "item"}"`)
-        return
+        localItemErrors[it.key] = `Product not found for "${it?.name || it?.sku || "item"}"`
+        continue
       }
       if (!Number.isFinite(wanted) || wanted <= 0) {
-        setError(`Invalid quantity for "${p.name}"`)
-        return
+        localItemErrors[it.key] = `Invalid quantity for "${p.name}"`
+        continue
       }
       const available = Number(p.stock ?? 0)
       if (!Number.isFinite(available)) {
-        setError(`Inventory not configured for "${p.name}"`)
-        return
+        localItemErrors[it.key] = `Inventory not configured for "${p.name}"`
+        continue
       }
       if (available < wanted) {
-        setError(
-          `Not enough stock for "${p.name}". Available: ${available}, requested: ${wanted}`
-        )
-        return
+        localItemErrors[it.key] = `Not enough stock for "${p.name}". Available: ${available}, requested: ${wanted}`
+        continue
       }
+    }
+    setItemErrors(localItemErrors)
+    const firstItemError = Object.values(localItemErrors)[0]
+    if (firstItemError) {
+      setError(firstItemError)
+      setFormHint("")
+      return
     }
 
     setSaving(true)
@@ -509,42 +518,42 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                     Select Existing Customer
                   </label>
                   <div className="relative">
-<select
-  className="w-full rounded-lg border border-gray-300 pl-3 pr-8 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
-  value={customerId}
-  onChange={(e) => {
-    const id = e.target.value
-    setCustomerId(id)
-    if (!id) {
-      // Clear fields if user reverts to blank
-      setNewCustomer({ name: "", email: "", phone: "", address: "" })
-      setMatch(null)
-      setShowMatchPrompt(false)
-      setFormHint("")
-      return
-    }
-    const selected = customers.find((c) => c.id === id)
-    if (selected) {
-      setNewCustomer({
-        name: selected.name || "",
-        email: selected.email || "",
-        phone: selected.phone || "",
-        address: selected.address || "",
-      })
-      // Clear any duplicate detection UI because we intentionally chose one
-      setMatch(null)
-      setShowMatchPrompt(false)
-      setFormHint("Using existing customer")
-    }
-  }}
->
-  <option value="">-- Choose Customer --</option>
-  {customers.map((c) => (
-    <option key={c.id} value={c.id}>
-      {c.name} — {c.phone}
-    </option>
-  ))}
-</select>
+                    <select
+                      className="w-full rounded-lg border border-gray-300 pl-3 pr-8 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+                      value={customerId}
+                      onChange={(e) => {
+                        const id = e.target.value
+                        setCustomerId(id)
+                        if (!id) {
+                          // Clear fields if user reverts to blank
+                          setNewCustomer({ name: "", email: "", phone: "", address: "" })
+                          setMatch(null)
+                          setShowMatchPrompt(false)
+                          setFormHint("")
+                          return
+                        }
+                        const selected = customers.find((c) => c.id === id)
+                        if (selected) {
+                          setNewCustomer({
+                            name: selected.name || "",
+                            email: selected.email || "",
+                            phone: selected.phone || "",
+                            address: selected.address || "",
+                          })
+                          // Clear any duplicate detection UI because we intentionally chose one
+                          setMatch(null)
+                          setShowMatchPrompt(false)
+                          setFormHint("Using existing customer")
+                        }
+                      }}
+                    >
+                      <option value="">-- Choose Customer --</option>
+                      {customers.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name} — {c.phone}
+                        </option>
+                      ))}
+                    </select>
 
                     <span className="pointer-events-none absolute right-2 top-2.5 text-gray-500">
                       ▼
@@ -692,6 +701,14 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
               {/* Items */}
               <section className="space-y-3">
                 <h4 className="font-medium text-gray-900">Order Items</h4>
+
+                {/* Section-level message for item errors */}
+                {Object.keys(itemErrors).length > 0 && (
+                  <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                    Please resolve the marked item issues below to proceed.
+                  </div>
+                )}
+
                 <div className="flex flex-col sm:flex-row gap-2">
                   <div className="relative flex-1">
                     <MagnifyingGlassIcon className="h-5 w-5 absolute left-2 top-2.5 text-gray-400" />
@@ -728,68 +745,74 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
 
                 <div className="space-y-2">
                   {items.map((it) => (
-                    <div
-                      key={it.key}
-                      className="border rounded-lg p-3 flex justify-between items-center"
-                    >
-                      <div className="flex items-center gap-3">
-                        {it.image && (
-                          <img
-                            src={it.image}
-                            alt={it.name}
-                            className="w-12 h-12 rounded object-cover"
-                          />
-                        )}
-                        <div>
-                          <div className="font-medium text-gray-900">{it.name}</div>
-                          <div className="text-sm text-gray-500">
-                            {it.qty} × ₹{it.price}
+                    <div key={it.key} className="border rounded-lg p-3">
+                      <div className="flex justify-between items-center">
+                        <div className="flex items-center gap-3">
+                          {it.image && (
+                            <img
+                              src={it.image}
+                              alt={it.name}
+                              className="w-12 h-12 rounded object-cover"
+                            />
+                          )}
+                          <div>
+                            <div className="font-medium text-gray-900">{it.name}</div>
+                            <div className="text-sm text-gray-500">
+                              {it.qty} × ₹{it.price}
+                            </div>
                           </div>
                         </div>
+                        <div className="flex gap-2 items-center">
+                          {!it.editing ? (
+                            <>
+                              <div className="text-sm font-medium">
+                                ₹{Number(it.price).toFixed(2)}
+                              </div>
+                              <button
+                                className="text-blue-600 text-sm hover:underline"
+                                onClick={() => toggleEditPrice(it.key, true)}
+                              >
+                                Edit
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <input
+                                type="number"
+                                min="0"
+                                className="w-24 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+                                value={it.price}
+                                onChange={(e) => changePrice(it.key, e.target.value)}
+                              />
+                              <button
+                                className="text-green-600 text-sm hover:underline"
+                                onClick={() => savePrice(it.key)}
+                              >
+                                Save
+                              </button>
+                              <button
+                                className="text-gray-500 text-sm hover:underline"
+                                onClick={() => cancelPrice(it.key)}
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          )}
+                          <button
+                            className="text-red-600 text-sm hover:underline"
+                            onClick={() => removeItem(it.key)}
+                          >
+                            Remove
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex gap-2 items-center">
-                        {!it.editing ? (
-                          <>
-                            <div className="text-sm font-medium">
-                              ₹{Number(it.price).toFixed(2)}
-                            </div>
-                            <button
-                              className="text-blue-600 text-sm hover:underline"
-                              onClick={() => toggleEditPrice(it.key, true)}
-                            >
-                              Edit
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              type="number"
-                              min="0"
-                              className="w-24 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
-                              value={it.price}
-                              onChange={(e) => changePrice(it.key, e.target.value)}
-                            />
-                            <button
-                              className="text-green-600 text-sm hover:underline"
-                              onClick={() => savePrice(it.key)}
-                            >
-                              Save
-                            </button>
-                            <button
-                              className="text-gray-500 text-sm hover:underline"
-                              onClick={() => cancelPrice(it.key)}
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        )}
-                        <button
-                          className="text-red-600 text-sm hover:underline"
-                          onClick={() => removeItem(it.key)}
-                        >
-                          Remove
-                        </button>
-                      </div>
+
+                      {/* Inline item error */}
+                      {itemErrors[it.key] && (
+                        <div className="mt-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                          {itemErrors[it.key]}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -907,6 +930,13 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                 </div>
                 <div className="mt-1 font-semibold">Grand Total: ₹{grandTotal.toFixed(2)}</div>
               </section>
+
+              {/* Compact bottom error bar (mobile-friendly) */}
+              {error && (
+                <div className="mx-4 -mb-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                  {error}
+                </div>
+              )}
             </div>
 
             {/* Footer */}
