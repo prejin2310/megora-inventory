@@ -509,18 +509,43 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                     Select Existing Customer
                   </label>
                   <div className="relative">
-                    <select
-                      className="w-full rounded-lg border border-gray-300 pl-3 pr-8 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                    >
-                      <option value="">-- Choose Customer --</option>
-                      {customers.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name} — {c.phone}
-                        </option>
-                      ))}
-                    </select>
+<select
+  className="w-full rounded-lg border border-gray-300 pl-3 pr-8 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
+  value={customerId}
+  onChange={(e) => {
+    const id = e.target.value
+    setCustomerId(id)
+    if (!id) {
+      // Clear fields if user reverts to blank
+      setNewCustomer({ name: "", email: "", phone: "", address: "" })
+      setMatch(null)
+      setShowMatchPrompt(false)
+      setFormHint("")
+      return
+    }
+    const selected = customers.find((c) => c.id === id)
+    if (selected) {
+      setNewCustomer({
+        name: selected.name || "",
+        email: selected.email || "",
+        phone: selected.phone || "",
+        address: selected.address || "",
+      })
+      // Clear any duplicate detection UI because we intentionally chose one
+      setMatch(null)
+      setShowMatchPrompt(false)
+      setFormHint("Using existing customer")
+    }
+  }}
+>
+  <option value="">-- Choose Customer --</option>
+  {customers.map((c) => (
+    <option key={c.id} value={c.id}>
+      {c.name} — {c.phone}
+    </option>
+  ))}
+</select>
+
                     <span className="pointer-events-none absolute right-2 top-2.5 text-gray-500">
                       ▼
                     </span>

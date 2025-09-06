@@ -9,6 +9,7 @@ import {
   updateOrderShipping,
   updateOrderEstimated,
   updateProductStock, // added
+  writeInventoryLedgerEntry, // NEW: record cancel/return reason into inventory_ledger
 } from "../../firebase/firestore";
 import Button from "../../components/ui/Button";
 
@@ -258,6 +259,11 @@ export default function OrderDetails() {
 
   const selectedCourier = COURIERS.find((c) => c.name === ship.courier);
 
+  // Derived flags to hide UI when Cancelled/Returned
+  const isTerminated = order?.status === "Cancelled" || order?.status === "Returned";
+  const shouldHideProgress = isTerminated;
+  const shouldHideStatusControls = isTerminated;
+
   // === ACTIONS ===
   const move = async (next) => {
     try {
@@ -279,7 +285,6 @@ export default function OrderDetails() {
 
       // ✅ Only send email when status changes
       await sendOrderProgressEmail(updated);
-
     } catch (e) {
       showAlert("error", e.message || "Failed to update status");
     }
@@ -306,8 +311,26 @@ export default function OrderDetails() {
           await Promise.all(
             (updated.items || [])
               .filter(it => it.productId)
-              .map(it => updateProductStock(it.productId, { add: +Number(it.qty || 1) }))
-          );
+              .map(async (it) => {
+                // a) increment stock back
+                await updateProductStock(it.productId, { add: +Number(it.qty || 1) })
+                // b) write a ledger entry with reason for transparency
+                await writeInventoryLedgerEntry({
+  productId: it.productId,
+  change: +Number(it.qty || 1),
+  reason: `${pendingStatus}: ${reasonText.trim()}`,
+  referenceId: orderId,
+  orderPublicId: updated.publicId || '',
+  itemSnapshot: {
+    name: it.name,
+    sku: it.sku,
+    qty: Number(it.qty || 0),
+    price: Number(it.price || 0),
+    image: it.image || '',
+  },
+})
+              })
+          )
         } catch (restockErr) {
           console.warn("Stock restock warning:", restockErr);
         }
@@ -377,11 +400,13 @@ export default function OrderDetails() {
         </span>
       </div>
 
-      {/* Progress */}
-      <div className="rounded-lg border bg-white p-4 shadow-sm">
-        <h3 className="font-semibold mb-3">Order Progress</h3>
-        {renderTimeline()}
-      </div>
+      {/* Progress: hide when Cancelled/Returned */}
+      {!shouldHideProgress && (
+        <div className="rounded-lg border bg-white p-4 shadow-sm">
+          <h3 className="font-semibold mb-3">Order Progress</h3>
+          {renderTimeline()}
+        </div>
+      )}
 
       {/* Share */}
       <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
@@ -392,99 +417,105 @@ export default function OrderDetails() {
         </div>
       </div>
 
-      {/* Status Controls */}
-      <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
-        <h3 className="font-semibold">Status</h3>
-        <div className="flex flex-wrap gap-2">
-          {canAdvance.next("Packed") && (
-            <Button onClick={() => move("Packed")}>Mark Packed</Button>
-          )}
-          {canAdvance.next("Waiting for Pickup") && (
-            <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
-          )}
-          {canAdvance.next("In Transit") && (
-            <Button onClick={() => move("In Transit")}>In Transit</Button>
-          )}
-          {canAdvance.next("Out for Delivery") && (
-            <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
-          )}
-          {canAdvance.next("Delivered") && (
-            <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
-          )}
-          <button
-            onClick={() => askReasonAndMove("Cancelled")}
-            className="flex items-center gap-1 rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => askReasonAndMove("Returned")}
-            className="flex items-center gap-1 rounded-md border border-yellow-500 bg-yellow-100 px-3 py-1 text-sm font-semibold text-yellow-700 hover:bg-yellow-200"
-          >
-            Return
-          </button>
+      {/* Status Controls: hide when Cancelled/Returned */}
+      {!shouldHideStatusControls && (
+        <div className="rounded-lg border bg-white p-4 shadow-sm space-y-3">
+          <h3 className="font-semibold">Status</h3>
+          <div className="flex flex-wrap gap-2">
+            {canAdvance.next("Packed") && (
+              <Button onClick={() => move("Packed")}>Mark Packed</Button>
+            )}
+            {canAdvance.next("Waiting for Pickup") && (
+              <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
+            )}
+            {canAdvance.next("In Transit") && (
+              <Button onClick={() => move("In Transit")}>In Transit</Button>
+            )}
+            {canAdvance.next("Out for Delivery") && (
+              <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
+            )}
+            {canAdvance.next("Delivered") && (
+              <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
+            )}
+            <button
+              onClick={() => askReasonAndMove("Cancelled")}
+              className="flex items-center gap-1 rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => askReasonAndMove("Returned")}
+              className="flex items-center gap-1 rounded-md border border-yellow-500 bg-yellow-100 px-3 py-1 text-sm font-semibold text-yellow-700 hover:bg-yellow-200"
+            >
+              Return
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* ETA */}
-      <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
-        <h3 className="font-semibold">Estimated Delivery</h3>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="date"
-            value={estimatedDelivery?.slice(0, 10) || ""}
-            onChange={(e) => setEstimatedDelivery(e.target.value)}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <Button onClick={saveEstimated}>Save</Button>
+      {/* ETA: hide edit controls if terminated */}
+      {!isTerminated && (
+        <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
+          <h3 className="font-semibold">Estimated Delivery</h3>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              type="date"
+              value={estimatedDelivery?.slice(0, 10) || ""}
+              onChange={(e) => setEstimatedDelivery(e.target.value)}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <Button onClick={saveEstimated}>Save</Button>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* Shipping */}
-      <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
-        <h3 className="font-semibold">Shipping</h3>
-        <div className="grid gap-2 md:grid-cols-2">
-          <select
-            value={ship.courier}
-            onChange={(e) => setShip((s) => ({ ...s, courier: e.target.value }))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          >
-            <option value="">Select Courier</option>
-            {COURIERS.map((c) => (
-              <option key={c.name} value={c.name}>{c.name}</option>
-            ))}
-          </select>
-          <input
-            placeholder="AWB / Tracking #"
-            value={ship.awb}
-            onChange={(e) => setShip((s) => ({ ...s, awb: e.target.value }))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <input
-            type="datetime-local"
-            value={ship.pickupAt}
-            onChange={(e) => setShip((s) => ({ ...s, pickupAt: e.target.value }))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
-          <input
-            placeholder="Notes"
-            value={ship.notes}
-            onChange={(e) => setShip((s) => ({ ...s, notes: e.target.value }))}
-            className="rounded-md border border-gray-300 px-3 py-2 text-sm"
-          />
+      {/* Shipping: hide edit controls if terminated */}
+      {!isTerminated && (
+        <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">
+          <h3 className="font-semibold">Shipping</h3>
+          <div className="grid gap-2 md:grid-cols-2">
+            <select
+              value={ship.courier}
+              onChange={(e) => setShip((s) => ({ ...s, courier: e.target.value }))}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            >
+              <option value="">Select Courier</option>
+              {COURIERS.map((c) => (
+                <option key={c.name} value={c.name}>{c.name}</option>
+              ))}
+            </select>
+            <input
+              placeholder="AWB / Tracking #"
+              value={ship.awb}
+              onChange={(e) => setShip((s) => ({ ...s, awb: e.target.value }))}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <input
+              type="datetime-local"
+              value={ship.pickupAt}
+              onChange={(e) => setShip((s) => ({ ...s, pickupAt: e.target.value }))}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+            <input
+              placeholder="Notes"
+              value={ship.notes}
+              onChange={(e) => setShip((s) => ({ ...s, notes: e.target.value }))}
+              className="rounded-md border border-gray-300 px-3 py-2 text-sm"
+            />
+          </div>
+          {selectedCourier && ship.awb && (
+            <p className="text-xs text-gray-500">
+              Track at:{" "}
+              <a href={selectedCourier.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
+                {selectedCourier.url}
+              </a>
+            </p>
+          )}
+          <div className="flex justify-end">
+            <Button onClick={saveShipping} disabled={savingShip}>Save</Button>
+          </div>
         </div>
-        {selectedCourier && ship.awb && (
-          <p className="text-xs text-gray-500">
-            Track at:{" "}
-            <a href={selectedCourier.url} target="_blank" rel="noreferrer" className="text-blue-600 underline">
-              {selectedCourier.url}
-            </a>
-          </p>
-        )}
-        <div className="flex justify-end">
-          <Button onClick={saveShipping} disabled={savingShip}>Save</Button>
-        </div>
-      </div>
+      )}
 
       {/* Items */}
       <div className="rounded-lg border bg-white p-4 shadow-sm space-y-2">

@@ -303,6 +303,36 @@ export async function decrementProductStockGuarded(productId, qty) {
   })
 }
 
+// ADD: write inventory ledger entry for visibility in InventoryLedger page
+export async function writeInventoryLedgerEntry({
+  productId,
+  change,
+  reason,
+  referenceId,
+  orderPublicId, // optional, helpful for linking
+  itemSnapshot,  // { name, sku, qty, price, image } optional
+}) {
+  if (!productId || !Number.isFinite(change)) {
+    throw new Error('Invalid inventory ledger payload')
+  }
+  const payload = {
+    productId: String(productId),
+    change: Number(change),
+    reason: String(reason || ''),
+    referenceId: referenceId ? String(referenceId) : '',
+    orderPublicId: orderPublicId ? String(orderPublicId) : '',
+    item: itemSnapshot ? {
+      name: String(itemSnapshot.name || ''),
+      sku: String(itemSnapshot.sku || ''),
+      qty: Number(itemSnapshot.qty || 0),
+      price: Number(itemSnapshot.price || 0),
+      image: String(itemSnapshot.image || ''),
+    } : null,
+    createdAt: serverTimestamp(),
+  }
+  return addDoc(collection(db, 'inventory_ledger'), payload)
+}
+
 // Stock update: supports setTo (absolute) or add (delta) using atomic increment
 export async function updateProductStock(productId, { add: delta }) {
   if (!productId || typeof delta !== "number" || !isFinite(delta)) {
