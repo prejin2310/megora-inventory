@@ -5,7 +5,7 @@ import {
   CheckCircle2,
   Package,
   Truck,
-  Building ,
+  Building,
   MapPin,
   Calendar,
   Clock,
@@ -60,19 +60,19 @@ const money = (n) => `₹${Number(n || 0).toFixed(2)}`;
 const FLOW = [
   { key: "Received", label: "Order Received", icon: Package },
   { key: "Packed", label: "Item Packed", icon: BoxIcon },
-  { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Building  },
+  { key: "Waiting for Pickup", label: "Pickup Initiated", icon: Building },
   { key: "In Transit", label: "In Transit", icon: Truck },
   { key: "Out for Delivery", label: "Out for Delivery", icon: Bike },
   { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
 ];
 
-// NEW: Reduced flow to show only Received and Delivered when delivered
+// Reduced flow when delivered
 const FLOW_DELIVERED_MIN = [
   { key: "Received", label: "Order Received", icon: Package },
   { key: "Delivered", label: "Delivered", icon: CheckCircle2 },
 ];
 
-// Fallback icon (simple cube) when using "BoxIcon" reference
+// Fallback icon
 function BoxIcon(props) {
   return (
     <svg
@@ -136,7 +136,7 @@ export default function PublicOrderNeo() {
   const customerName = order?.customer?.name || "Customer";
   const orderNumber = order?.publicId || order?.id || "";
   const shipping = order?.shipping || {};
-  const address = shipping?.address || order?.customer?.address || ""; // may be string in your data
+  const address = shipping?.address || order?.customer?.address || "";
   const totals = order?.totals || { subtotal: 0, shipping: 0, discount: 0, grandTotal: 0 };
 
   const flow = FLOW;
@@ -147,12 +147,10 @@ export default function PublicOrderNeo() {
   const trackingUrl = (shipping?.trackingUrl || "").trim();
   const canTrack = Boolean(trackingUrl);
 
-  // Choose which flow to use in the Timeline
-const isDelivered = order?.status === "Delivered";
-const flowToUse = isDelivered ? FLOW_DELIVERED_MIN : FLOW;
+  const isDelivered = order?.status === "Delivered";
+  const flowToUse = isDelivered ? FLOW_DELIVERED_MIN : FLOW;
 
-
-  // Return policy: 24h from Delivered timestamp
+  // Return policy window
   let returnExpired = false;
   let returnEndsAt = null;
   if (order?.status === "Delivered" && statusTimes["Delivered"]) {
@@ -163,15 +161,24 @@ const flowToUse = isDelivered ? FLOW_DELIVERED_MIN : FLOW;
     }
   }
 
-  // WhatsApp link with prefilled message and newlines
-  const returnPhone = "917736166728"; // international without +
+  const returnPhone = "917736166728";
   const prefilledMessage = ["#Return Request", `Order: ${orderNumber}`, `Customer: ${customerName}`, "Reason: "].join("\n");
   const waReturnLink = `https://wa.me/${returnPhone}?text=${encodeURIComponent(prefilledMessage)}`;
 
-  // Progress percent for bar
-  const progressPct = Math.max(0, Math.min(100, ((currentIndex + 1) / flow.length) * 100));
+ // Replace your current progressPct line with this:
+const progressPct = !order
+  ? 0
+  : Math.max(
+      0,
+      Math.min(
+        100,
+        flow.length > 1
+          // Use index over (length - 1) so the first step is 0%, last is 100%
+          ? (Math.max(0, currentIndex) / (flow.length - 1)) * 100
+          : 100
+      )
+    )
 
-  // Small helper to render address (string or object)
   const renderAddress = () => {
     if (!address) return "-";
     if (typeof address === "string") return address;
@@ -186,349 +193,356 @@ const flowToUse = isDelivered ? FLOW_DELIVERED_MIN : FLOW;
   };
 
   // -------------- UI Blocks --------------
-const Header = (
-  <div className="bg-brand text-white shadow">
-    <div className="mx-auto w-full max-w-6xl px-4 py-6">
-      {/* Desktop layout */}
-      <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-center md:gap-6">
-        {/* Logo */}
-        <div className="h-16 w-16">
-          <img
-            src={LOGO_URL}
-            alt="Megora Jewels"
-            className="h-full w-full object-contain"
-          />
-        </div>
-
-        {/* Brand text */}
-        <div>
-          <h1 className="font-groillim text-xl font-bold tracking-wide">
-            Megora Jewels
-          </h1>
-          <p className="text-sm text-white/70">
-            Exclusive Online Store — Shop Anytime Anywhere!
-          </p>
-          <a
-  className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
-  href="https://www.megorajewels.com"
-  target="_blank"
-  rel="noreferrer noopener"
->
-  www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
-</a>
-
-        </div>
-
-        {/* Order summary */}
-        <motion.div
-          initial={{ y: -10, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ type: "spring", stiffness: 260, damping: 20 }}
-          className="justify-self-end w-[260px]"
-        >
-          <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur">
-            <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-              <span className="text-xs text-white/70">Order</span>
-              <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
-            </div>
-            <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-              <span className="text-xs text-white/70">Placed</span>
-              <span className="justify-self-end text-xs">
-                {placedAtDate ? placedAtDate.toLocaleString() : "-"}
-              </span>
-            </div>
-            <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
-              <span className="text-xs text-white/70">Status</span>
-              <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
-                {order?.status || "-"}
-              </span>
-            </div>
+  const Header = (
+    <div className="bg-brand text-white shadow">
+      <div className="mx-auto w-full max-w-6xl px-4 py-6">
+        {/* Desktop */}
+        <div className="hidden md:grid md:grid-cols-[auto_1fr_auto] md:items-center md:gap-6">
+          <div className="h-16 w-16">
+            <img src={LOGO_URL} alt="Megora Jewels" className="h-full w-full object-contain" />
           </div>
-        </motion.div>
-      </div>
-
-      {/* Mobile layout */}
-      {/* Mobile layout */}
-<div className="flex flex-col items-center text-center md:hidden">
-  {/* Logo (centered) */}
-  <img
-    src={LOGO_URL}
-    alt="Megora Jewels"
-    className="h-20 w-20 mb-2 object-contain mx-auto"
-  />
-
-  {/* Brand */}
-  <h1 className="font-groillim text-base font-semibold tracking-wide">
-    Megora Jewels
-  </h1>
-  <p className="text-[11px] text-white/70">Exclusive Online Store</p>
-
-  {/* Website link */}
- <a
-  className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
-  href="https://www.megorajewels.com"
-  target="_blank"
-  rel="noreferrer noopener"
->
-  www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
-</a>
-
-
-
-  {/* Order summary */}
-  <motion.div
-    initial={{ y: -10, opacity: 0 }}
-    animate={{ y: 0, opacity: 1 }}
-    transition={{ type: "spring", stiffness: 260, damping: 20 }}
-    className="mt-4 w-full max-w-sm"
-  >
-    <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur text-left">
-      <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-        <span className="text-xs text-white/70">Order</span>
-        <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
-      </div>
-      <div className="grid grid-cols-[80px_1fr] items-center gap-2">
-        <span className="text-xs text-white/70">Placed</span>
-        <span className="justify-self-end text-xs">
-          {placedAtDate ? placedAtDate.toLocaleString() : "-"}
-        </span>
-      </div>
-      <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
-        <span className="text-xs text-white/70">Status</span>
-        <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
-          {order?.status || "-"}
-        </span>
-      </div>
-    </div>
-  </motion.div>
-</div>
-
-
-      {/* Progress bar (shared for both) */}
-      <div className="mt-5">
-        <div className="h-1.5 md:h-2 w-full overflow-hidden rounded-full bg-white/30">
+          <div>
+            <h1 className="font-groillim text-xl font-bold tracking-wide">Megora Jewels</h1>
+            <p className="text-sm text-white/70">Exclusive Online Store — Shop Anytime Anywhere!</p>
+            <a
+              className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
+              href="https://www.megorajewels.com"
+              target="_blank"
+              rel="noreferrer noopener"
+            >
+              www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
+            </a>
+          </div>
           <motion.div
-            initial={{ width: 0 }}
-            animate={{ width: `${progressPct}%` }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
-            className="h-full rounded-full bg-white"
-          />
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            className="justify-self-end w-[260px]"
+          >
+            <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur">
+              <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Order</span>
+                <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Placed</span>
+                <span className="justify-self-end text-xs">{placedAtDate ? placedAtDate.toLocaleString() : "-"}</span>
+              </div>
+              <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Status</span>
+                <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
+                  {order?.status || "-"}
+                </span>
+              </div>
+            </div>
+          </motion.div>
         </div>
-        <div className="mt-1 text-right text-[10px] md:text-xs text-white/80">
-          {Math.round(progressPct)}% complete
+
+        {/* Mobile */}
+        <div className="flex flex-col items-center text-center md:hidden">
+          <img src={LOGO_URL} alt="Megora Jewels" className="h-20 w-20 mb-2 object-contain mx-auto" />
+          <h1 className="font-groillim text-base font-semibold tracking-wide">Megora Jewels</h1>
+          <p className="text-[11px] text-white/70">Exclusive Online Store</p>
+          <a
+            className="inline-flex items-center gap-1 text-xs text-white hover:text-white/80"
+            href="https://www.megorajewels.com"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            www.megorajewels.com <ExternalLink className="h-4 w-4 text-white" />
+          </a>
+          <motion.div
+            initial={{ y: -10, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 260, damping: 20 }}
+            className="mt-4 w-full max-w-sm"
+          >
+            <div className="rounded-2xl border border-white/30 bg-white/10 p-3 backdrop-blur text-left">
+              <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Order</span>
+                <span className="justify-self-end font-bold">#{orderNumber || "-"}</span>
+              </div>
+              <div className="grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Placed</span>
+                <span className="justify-self-end text-xs">{placedAtDate ? placedAtDate.toLocaleString() : "-"}</span>
+              </div>
+              <div className="mt-1 grid grid-cols-[80px_1fr] items-center gap-2">
+                <span className="text-xs text-white/70">Status</span>
+                <span className="justify-self-end rounded-full border border-white/30 bg-emerald-700 px-3 py-1 text-[11px] font-semibold text-white shadow">
+                  {order?.status || "-"}
+                </span>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-5">
+          <div className="h-1.5 md:h-2 w-full overflow-hidden rounded-full bg-white/30">
+            <motion.div
+              initial={{ width: 0 }}
+              animate={{ width: `${progressPct}%` }}
+              transition={{ duration: 0.7, ease: "easeOut" }}
+              className="h-full rounded-full bg-white"
+            />
+          </div>
+          <div className="mt-1 text-right text-[10px] md:text-xs text-white/80">{Math.round(progressPct)}% complete</div>
         </div>
       </div>
     </div>
-  </div>
-);
-
-
-
-  const Loading = (
-    <div className="flex min-h-[60vh] items-center justify-center bg-slate-50 p-6">
-      <motion.div
-        className="flex items-center gap-3 rounded-2xl bg-white p-4 shadow-lg"
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-      >
-        <span className="relative inline-flex h-3 w-3">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-75" />
-          <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-600" />
-        </span>
-        <p className="text-sm text-slate-600">Loading order…</p>
-      </motion.div>
-    </div>
   );
 
-  if (loading) return (
-    <div className="min-h-screen">{Header}{Loading}</div>
-  );
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-slate-50">
-        {Header}
-        <div className="mx-auto w-full max-w-3xl p-4">
-          <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 shadow-sm">
-            <div className="flex items-center gap-2"><Info className="h-4 w-4" /><span className="font-semibold">{error}</span></div>
+  // Enhanced Loading
+const Loading = (
+  <div className="flex min-h-[40vh] items-center justify-center bg-slate-50 px-4">
+    <motion.div
+      className="w-full max-w-md rounded-xl border border-emerald-100 bg-white p-4 shadow"
+      initial={{ y: 6, opacity: 0 }}
+      animate={{ y: 0, opacity: 1 }}
+      transition={{ type: "spring", stiffness: 240, damping: 20 }}
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-3">
+        <div className="relative h-9 w-9">
+          <div className="absolute inset-0 rounded-full bg-emerald-100 animate-ping motion-reduce:animate-none" />
+          <div className="relative grid h-9 w-9 place-items-center rounded-full bg-emerald-600 text-white">
+            <Truck className="h-5 w-5" />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-slate-800">
+            Fetching order details…
+          </div>
+          <div className="text-[11px] text-slate-500">
+            This page updates automatically.
           </div>
         </div>
       </div>
-    );
-  }
+
+      {/* Slim shimmer bar */}
+      <div className="mt-3 h-1 w-full overflow-hidden rounded bg-gray-100">
+        <div className="h-1 w-1/3 animate-[loader_1.2s_ease-in-out_infinite] rounded bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-500" />
+      </div>
+      <style>
+        {`@keyframes loader{0%{margin-left:-35%}50%{margin-left:55%}100%{margin-left:120%}}`}
+      </style>
+    </motion.div>
+  </div>
+)
+
+
+  // Not Found empty state
+  const NotFound = (
+    <div className="mx-auto w-full max-w-xl p-4">
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 text-center shadow-sm">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-amber-200/80 text-amber-800">
+          <Info className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-semibold text-amber-900">Order not found</h3>
+        <p className="mt-1 text-sm text-amber-900/80">
+          The link may be incorrect or the order was removed. Please check the order number or contact support.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+          <a
+            href="https://megorajewels.com/"
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-white px-3 py-2 text-sm font-medium text-amber-900 hover:bg-amber-100"
+          >
+            <ExternalLink className="h-4 w-4" /> Go to Home
+          </a>
+          <a
+            href="https://wa.me/917736166728?text=Need%20help%20with%20order%20tracking"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+          >
+            <Phone className="h-4 w-4" /> Contact Support
+          </a>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Error state
+  const ErrorBlock = (
+    <div className="mx-auto w-full max-w-xl p-4">
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center shadow-sm">
+        <div className="mx-auto mb-3 grid h-12 w-12 place-items-center rounded-full bg-red-200/80 text-red-800">
+          {/* Using lucide Info for consistency or swap to a triangle icon from your set */}
+          <Info className="h-6 w-6" />
+        </div>
+        <h3 className="text-base font-semibold text-red-900">Something went wrong</h3>
+        <p className="mt-1 text-sm text-red-900/80">{error || "Failed to load order. Please try again."}</p>
+        <div className="mt-3">
+          <button
+            onClick={() => location.reload()}
+            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-3 py-2 text-sm font-semibold text-white hover:bg-red-700"
+          >
+            <BadgeCheck className="h-4 w-4" /> Retry
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Early returns
+  if (loading) return <div className="min-h-screen">{Header}{Loading}</div>;
+  if (error && !order) return <div className="min-h-screen bg-slate-50">{Header}{NotFound}</div>;
 
   if (!order) {
     return (
       <div className="min-h-screen bg-slate-50">
         {Header}
-        <div className="mx-auto w-full max-w-3xl p-4">
-          <div className="rounded-xl border p-4 text-sm text-slate-600 shadow-sm">No order data.</div>
-        </div>
+        {NotFound}
       </div>
     );
   }
 
-  // Timeline row
-// Timeline row with animations
-// Timeline row with animations
-const Timeline = (
-  <div className="rounded-2xl border bg-white p-4 shadow-sm">
-    <div className="mb-3 flex items-start justify-between gap-3">
-      <div>
-        <h3 className="font-bold">Order Progress</h3>
-        <p className="text-xs text-slate-500">
-          {isDelivered ? "Summary of key milestones." : "Follow your order from warehouse to your door."}
-        </p>
+  // Timeline
+  const Timeline = (
+    <div className="rounded-2xl border bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <h3 className="font-bold">Order Progress</h3>
+          <p className="text-xs text-slate-500">
+            {isDelivered ? "Summary of key milestones." : "Follow your order from warehouse to your door."}
+          </p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-slate-500">Estimated Delivery</div>
+          <div className="text-sm font-semibold">{estDelivery ? fmtDate(estDelivery) : "—"}</div>
+        </div>
       </div>
-      <div className="text-right">
-        <div className="text-xs text-slate-500">Estimated Delivery</div>
-        <div className="text-sm font-semibold">{estDelivery ? fmtDate(estDelivery) : "—"}</div>
-      </div>
-    </div>
 
-    <div className="grid gap-4">
-      {flowToUse.map((step, idx) => {
-        const Icon = step.icon || Package;
-        const reached = idx < currentIndex;
-        const isCurrent = idx === currentIndex;
-        const at = statusTimes[step.key];
-        const dateStr = at ? fmtDate(at) : "-";
-        const timeStr = at ? fmtTime(at) : "-";
-        const showCourierInline = step.key === "In Transit" && reached && (shipping?.courier || shipping?.awb);
+      <div className="grid gap-4">
+        {flowToUse.map((step, idx) => {
+          const Icon = step.icon || Package;
+          const reached = idx < currentIndex;
+          const isCurrent = idx === currentIndex;
+          const at = statusTimes[step.key];
+          const dateStr = at ? fmtDate(at) : "-";
+          const timeStr = at ? fmtTime(at) : "-";
+          const showCourierInline = step.key === "In Transit" && reached && (shipping?.courier || shipping?.awb);
 
-        return (
-          <motion.div
-            key={step.key}
-            initial={{ x: -20, opacity: 0 }}
-            whileInView={{ x: 0, opacity: 1 }}
-            viewport={{ once: true, margin: "-20%" }}
-            transition={{ type: "spring", stiffness: 200, damping: 20, delay: idx * 0.1 }}
-            className="relative grid grid-cols-[28px_1fr] items-start gap-3"
-          >
-            <div className="relative">
-              {idx < flowToUse.length - 1 && (
-                <motion.div
-                  className="absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 z-0"
-                  initial={{ scaleY: 0 }}
-                  animate={{ scaleY: 1 }}
-                  transition={{ duration: 0.5, delay: idx * 0.1 }}
-                >
-                  {idx < currentIndex ? (
-                    <div className="h-full w-full bg-emerald-200" />
-                  ) : idx === currentIndex ? (
-                    <div className="h-full w-full bg-gradient-to-b from-emerald-400 via-emerald-200 to-emerald-400 animate-pulse" />
-                  ) : (
-                    <div className="h-full w-full bg-slate-200" />
-                  )}
-                </motion.div>
-              )}
-
-              <motion.div
-                className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border-2 ${
-                  isCurrent
-                    ? "border-emerald-600 bg-white ring-8 ring-emerald-100"
-                    : reached
-                    ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-300 bg-white"
-                }`}
-                animate={
-                  isCurrent
-                    ? { scale: [1, 1.2, 1] }
-                    : reached
-                    ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 8px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] }
-                    : {}
-                }
-                transition={{
-                  duration: isCurrent ? 1.5 : 1,
-                  repeat: isCurrent ? Infinity : 0,
-                  ease: "easeInOut",
-                }}
-              >
-                <Icon className={`h-4 w-4 ${reached || isCurrent ? "text-emerald-600" : "text-slate-400"}`} />
-              </motion.div>
-            </div>
-
+          return (
             <motion.div
-              className="min-w-0"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: idx * 0.1 }}
+              key={step.key}
+              initial={{ x: -20, opacity: 0 }}
+              whileInView={{ x: 0, opacity: 1 }}
+              viewport={{ once: true, margin: "-20%" }}
+              transition={{ type: "spring", stiffness: 200, damping: 20, delay: idx * 0.1 }}
+              className="relative grid grid-cols-[28px_1fr] items-start gap-3"
             >
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <div className={`truncate text-sm font-semibold ${reached || isCurrent ? "text-emerald-700" : "text-slate-600"}`}>
-                  {step.label}
-                </div>
-                <div className="text-right text-xs text-slate-500">
-                  <div>{dateStr}</div>
-                  <div>{timeStr}</div>
-                </div>
+              <div className="relative">
+                {idx < flowToUse.length - 1 && (
+                  <motion.div
+                    className="absolute left-1/2 top-7 -ml-px h-[28px] w-0.5 z-0"
+                    initial={{ scaleY: 0 }}
+                    animate={{ scaleY: 1 }}
+                    transition={{ duration: 0.5, delay: idx * 0.1 }}
+                  >
+                    {idx < currentIndex ? (
+                      <div className="h-full w-full bg-emerald-200" />
+                    ) : idx === currentIndex ? (
+                      <div className="h-full w-full bg-gradient-to-b from-emerald-400 via-emerald-200 to-emerald-400 animate-pulse" />
+                    ) : (
+                      <div className="h-full w-full bg-slate-200" />
+                    )}
+                  </motion.div>
+                )}
+
+                <motion.div
+                  className={`relative z-10 grid h-7 w-7 place-items-center rounded-full border-2 ${
+                    isCurrent
+                      ? "border-emerald-600 bg-white ring-8 ring-emerald-100"
+                      : reached
+                      ? "border-emerald-500 bg-emerald-50"
+                      : "border-slate-300 bg-white"
+                  }`}
+                  animate={
+                    isCurrent
+                      ? { scale: [1, 1.2, 1] }
+                      : reached
+                      ? { boxShadow: ["0 0 0px rgba(16,185,129,0)", "0 0 8px rgba(16,185,129,0.4)", "0 0 0px rgba(16,185,129,0)"] }
+                      : {}
+                  }
+                  transition={{
+                    duration: isCurrent ? 1.5 : 1,
+                    repeat: isCurrent ? Infinity : 0,
+                    ease: "easeInOut",
+                  }}
+                >
+                  <Icon className={`h-4 w-4 ${reached || isCurrent ? "text-emerald-600" : "text-slate-400"}`} />
+                </motion.div>
               </div>
 
-              {/* Only show courier inline for non-delivered flow */}
-              {!isDelivered && showCourierInline && (
-                <motion.div
-                  className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.3 }}
-                >
-                  {shipping?.courier && (
-                    <div>
-                      <span className="text-slate-500">Courier:</span> <span className="font-medium">{shipping.courier}</span>
-                    </div>
-                  )}
-                  {shipping?.awb && (
-                    <div>
-                      <span className="text-slate-500">AWB:</span> <span className="font-medium">{shipping.awb}</span>
-                    </div>
-                  )}
-                </motion.div>
-              )}
+              <motion.div
+                className="min-w-0"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3, delay: idx * 0.1 }}
+              >
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div className={`truncate text-sm font-semibold ${reached || isCurrent ? "text-emerald-700" : "text-slate-600"}`}>
+                    {step.label}
+                  </div>
+                  <div className="text-right text-xs text-slate-500">
+                    <div>{dateStr}</div>
+                    <div>{timeStr}</div>
+                  </div>
+                </div>
+
+                {!isDelivered && showCourierInline && (
+                  <motion.div
+                    className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-700"
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {shipping?.courier && (
+                      <div>
+                        <span className="text-slate-500">Courier:</span> <span className="font-medium">{shipping.courier}</span>
+                      </div>
+                    )}
+                    {shipping?.awb && (
+                      <div>
+                        <span className="text-slate-500">AWB:</span> <span className="font-medium">{shipping.awb}</span>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </motion.div>
             </motion.div>
-          </motion.div>
-        );
-      })}
-    </div>
-
-    {/* Keep “Live tracking” only when not delivered */}
-    {!isDelivered && canTrack && (
-      <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="text-slate-700">
-            <div className="text-xs text-slate-500">Live tracking</div>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              {shipping?.courier && (
-                <span>
-                  Courier: <strong>{shipping.courier}</strong>
-                </span>
-              )}
-              {shipping?.awb && (
-                <span>
-                  • AWB: <strong>{shipping.awb}</strong>
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="grow" />
-          <a
-            className="inline-flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:brightness-95"
-            href={trackingUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            title="Open official courier tracking"
-          >
-            <Navigation className="h-4 w-4 text-white" /> Track Live Location
-          </a>
-        </div>
-        <div className="mt-2 text-xs text-emerald-800/80">Live location updates can be viewed only on the official courier website.</div>
+          );
+        })}
       </div>
-    )}
-  </div>
-);
 
-
-
-
+      {!isDelivered && canTrack && (
+        <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="text-slate-700">
+              <div className="text-xs text-slate-500">Live tracking</div>
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                {shipping?.courier && <span>Courier: <strong>{shipping.courier}</strong></span>}
+                {shipping?.awb && <span>• AWB: <strong>{shipping.awb}</strong></span>}
+              </div>
+            </div>
+            <div className="grow" />
+            <a
+              className="inline-flex items-center gap-2 rounded-lg border border-emerald-500 bg-emerald-600 px-3 py-2 text-xs font-semibold text-white shadow hover:brightness-95"
+              href={trackingUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              title="Open official courier tracking"
+            >
+              <Navigation className="h-4 w-4 text-white" /> Track Live Location
+            </a>
+          </div>
+          <div className="mt-2 text-xs text-emerald-800/80">Live location updates can be viewed only on the official courier website.</div>
+        </div>
+      )}
+    </div>
+  );
 
   const ReturnPolicy = (
     <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm">
@@ -540,14 +554,18 @@ const Timeline = (
         {returnEndsAt && !returnExpired && (
           <div className="text-right">
             <div className="text-xs text-slate-500">Return window ends</div>
-            <div className="text-sm font-semibold">{fmtDate(returnEndsAt)} {fmtTime(returnEndsAt)}</div>
+            <div className="text-sm font-semibold">
+              {fmtDate(returnEndsAt)} {fmtTime(returnEndsAt)}
+            </div>
           </div>
         )}
       </div>
 
       {!returnExpired ? (
         <div className="grid gap-2 text-sm">
-          <div className="flex items-start gap-2"><ShieldCheck className="mt-0.5 h-4 w-4 text-emerald-700" /> A clear, continuous open-box video recorded at the time of unboxing is required.</div>
+          <div className="flex items-start gap-2">
+            <ShieldCheck className="mt-0.5 h-4 w-4 text-emerald-700" /> A clear, continuous open-box video recorded at the time of unboxing is required.
+          </div>
           <div className="pt-1">
             <a
               href={waReturnLink}
@@ -563,7 +581,10 @@ const Timeline = (
         <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <div className="font-semibold">Sorry, your return policy period has ended.</div>
           <div className="mt-1 text-red-900/80">
-            Need help? Chat with support on <a className="underline underline-offset-4" href={waReturnLink} target="_blank" rel="noreferrer noopener">WhatsApp</a>.
+            Need help? Chat with support on{" "}
+            <a className="underline underline-offset-4" href={waReturnLink} target="_blank" rel="noreferrer noopener">
+              WhatsApp
+            </a>.
           </div>
         </div>
       )}
@@ -585,7 +606,9 @@ const Timeline = (
                 )}
               </div>
               <div className="min-w-0 grow">
-                <div className="truncate text-sm font-semibold" title={it.name}>{it.name}</div>
+                <div className="truncate text-sm font-semibold" title={it.name}>
+                  {it.name}
+                </div>
                 <div className="text-[11px] text-slate-500">{it.sku}</div>
               </div>
               <div className="grid grid-cols-3 gap-4 text-right text-sm md:min-w-[280px]">
@@ -609,10 +632,22 @@ const Timeline = (
 
       {/* Totals */}
       <div className="mt-3 border-t pt-3">
-        <div className="mb-1 flex items-center justify-between text-sm"><span>Subtotal</span><span>{money(totals.subtotal)}</span></div>
-        <div className="mb-1 flex items-center justify-between text-sm"><span>Shipping</span><span>{money(totals.shipping)}</span></div>
-        <div className="mb-1 flex items-center justify-between text-sm"><span>Discount</span><span className="text-emerald-700">-{money(totals.discount)}</span></div>
-        <div className="mt-1 flex items-center justify-between text-base font-bold"><span>Grand Total</span><span>{money(totals.grandTotal)}</span></div>
+        <div className="mb-1 flex items-center justify-between text-sm">
+          <span>Subtotal</span>
+          <span>{money(totals.subtotal)}</span>
+        </div>
+        <div className="mb-1 flex items-center justify-between text-sm">
+          <span>Shipping</span>
+          <span>{money(totals.shipping)}</span>
+        </div>
+        <div className="mb-1 flex items-center justify-between text-sm">
+          <span>Discount</span>
+          <span className="text-emerald-700">-{money(totals.discount)}</span>
+        </div>
+        <div className="mt-1 flex items-center justify-between text-base font-bold">
+          <span>Grand Total</span>
+          <span>{money(totals.grandTotal)}</span>
+        </div>
       </div>
     </div>
   );
@@ -659,18 +694,13 @@ const Timeline = (
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
       {Header}
-
-<main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
-  {Greeting}
-  {isDelivered && ReturnPolicy}
-  {Timeline}
-  {Items}
-  {Delivery}
-
-</main>
-
-
-      {/* Page footer (subtle) */}
+      <main className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6">
+        {Greeting}
+        {isDelivered && ReturnPolicy}
+        {Timeline}
+        {Items}
+        {Delivery}
+      </main>
       <footer className="mx-auto w-full max-w-6xl px-4 pb-8 text-center text-[11px] text-slate-500">
         <div className="rounded-xl border bg-white p-2">This page updates automatically as your order progresses.</div>
       </footer>
