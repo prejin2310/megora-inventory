@@ -14,7 +14,8 @@ import {
   where,
   limit,
   increment, // atomic stock increments (kept)
-  runTransaction, // NEW: for continuous public ID
+  runTransaction,
+  onSnapshot, // NEW: for continuous public ID
 } from 'firebase/firestore'
 import { db } from './firebase'
 
@@ -283,16 +284,32 @@ export async function updateOrderEstimated(orderId, estimatedDate) {
   })
 }
 
-// Stock update: supports setTo (absolute) or add (delta) using atomic increment
-export async function updateProductStock(productId, { setTo = null, add = null }) {
-  const ref = doc(db, 'products', productId)
-  if (setTo != null) {
-    await updateDoc(ref, { stock: Number(setTo), updatedAt: serverTimestamp() })
-  } else if (add != null) {
-    await updateDoc(ref, { stock: increment(Number(add)), updatedAt: serverTimestamp() })
-  } else {
-    throw new Error('Provide either setTo or add')
+
+export async function decrementProductStockGuarded(productId, qty) {
+  if (!productId || !Number.isFinite(qty) || qty <= 0) {
+    throw new Error("Invalid decrement payload")
   }
+  const ref = doc(db, 'products', productId)
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists()) throw new Error("Product not found")
+    const cur = Number(snap.data()?.stock ?? 0)
+    if (!Number.isFinite(cur)) throw new Error("Product stock not configured")
+    if (cur < qty) throw new Error(`Insufficient stock. Available: ${cur}, requested: ${qty}`)
+    tx.update(ref, {
+      stock: cur - qty,
+      updatedAt: serverTimestamp(),
+    })
+  })
+}
+
+// Stock update: supports setTo (absolute) or add (delta) using atomic increment
+export async function updateProductStock(productId, { add: delta }) {
+  if (!productId || typeof delta !== "number" || !isFinite(delta)) {
+    throw new Error("Invalid stock update payload")
+  }
+  const ref = doc(db, "products", productId)
+  await updateDoc(ref, { stock: increment(delta) }) // atomic
 }
 
 export async function getProductBySku(sku) {
@@ -306,7 +323,6 @@ export async function getProductBySku(sku) {
 //real time updation of produtt 9add/edit/delete)
 
 export function subscribeProducts(cb) {
-  const db = getFirestore()
   const colRef = collection(db, 'products')
   const unsub = onSnapshot(colRef, (snap) => {
     const items = snap.docs.map(d => ({ id: d.id, ...d.data() }))
@@ -318,33 +334,29 @@ export function subscribeProducts(cb) {
 
 // New: update status + append to history
 export async function updateOrderStatusByPublicId(publicIdOrDocId, status, atDate) {
-  // If you only store publicId, look up the docId first:
   let targetDocRef
   if (publicIdOrDocId?.startsWith?.('orders/')) {
-    // already a path
     targetDocRef = doc(db, publicIdOrDocId)
   } else {
-    // try by publicId
-    const q = query(collection(db, 'orders'), where('publicId', '==', publicIdOrDocId), limit(1))
-    const snap = await getDocs(q)
+    const qy = query(collection(db, 'orders'), where('publicId', '==', publicIdOrDocId), limit(1))
+    const snap = await getDocs(qy)
     if (snap.empty) {
-      // fallback: assume it's the actual doc id
       targetDocRef = doc(db, 'orders', publicIdOrDocId)
     } else {
-      targetDocRef = snap.docs.ref
+      targetDocRef = snap.docs.ref // FIX
     }
   }
 
-  const at = atDate instanceof Date ? atDate : new Date()
-  // Prefer serverTimestamp for consistency; UI already handles Timestamp/Date
   await updateDoc(targetDocRef, {
     status,
+    updatedAt: serverTimestamp(), // ADD
     history: arrayUnion({
       status,
       at: serverTimestamp(),
     }),
   })
 }
+
 
 // Add near other imports/exports in src/firebase/firestore.js
 

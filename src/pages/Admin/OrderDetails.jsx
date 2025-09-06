@@ -8,6 +8,7 @@ import {
   updateOrderStatus,
   updateOrderShipping,
   updateOrderEstimated,
+  updateProductStock, // added
 } from "../../firebase/firestore";
 import Button from "../../components/ui/Button";
 
@@ -83,8 +84,6 @@ const STATUS_MESSAGES = {
   }
 };
 
-
-
 const buildStepsString = (currentStatus) => {
   const idx = STATUS_FLOW.findIndex((s) => s.label === currentStatus);
   return STATUS_FLOW.map((s, i) => `${i <= idx ? "✓" : "○"} ${s.label}`).join(" | ");
@@ -152,9 +151,6 @@ async function sendOrderProgressEmail(order) {
     templateParams
   );
 }
-
-
-
 
 export default function OrderDetails() {
   const { orderId } = useParams();
@@ -263,33 +259,31 @@ export default function OrderDetails() {
   const selectedCourier = COURIERS.find((c) => c.name === ship.courier);
 
   // === ACTIONS ===
-// === ACTIONS ===
-const move = async (next) => {
-  try {
-    // 🔒 Validation before moving to "In Transit"
-    if (next === "In Transit") {
-      if (!estimatedDelivery) {
-        showAlert("error", "Please set the Estimated Delivery date before marking as In Transit.");
-        return;
+  const move = async (next) => {
+    try {
+      // 🔒 Validation before moving to "In Transit"
+      if (next === "In Transit") {
+        if (!estimatedDelivery) {
+          showAlert("error", "Please set the Estimated Delivery date before marking as In Transit.");
+          return;
+        }
+        if (!ship.courier || !ship.awb) {
+          showAlert("error", "Please enter Courier and AWB details before marking as In Transit.");
+          return;
+        }
       }
-      if (!ship.courier || !ship.awb) {
-        showAlert("error", "Please enter Courier and AWB details before marking as In Transit.");
-        return;
-      }
+
+      await updateOrderStatus(orderId, next, `Moved to ${next}`);
+      const updated = await reload();
+      showAlert("success", `Order marked as ${next}`);
+
+      // ✅ Only send email when status changes
+      await sendOrderProgressEmail(updated);
+
+    } catch (e) {
+      showAlert("error", e.message || "Failed to update status");
     }
-
-    await updateOrderStatus(orderId, next, `Moved to ${next}`);
-    const updated = await reload();
-    showAlert("success", `Order marked as ${next}`);
-
-    // ✅ Only send email when status changes
-    await sendOrderProgressEmail(updated);
-
-  } catch (e) {
-    showAlert("error", e.message || "Failed to update status");
-  }
-};
-
+  };
 
   const askReasonAndMove = (next) => {
     setPendingStatus(next);
@@ -300,15 +294,36 @@ const move = async (next) => {
   const confirmReasonMove = async () => {
     if (!reasonText.trim()) return alert("Please provide a reason.");
     try {
+      // 1) Update status with reason note
       await updateOrderStatus(orderId, pendingStatus, reasonText.trim());
+
+      // 2) Reload order to get items for restock
       const updated = await reload();
+
+      // 3) Restock when Cancelled or Returned: increment stock by ordered qty
+      if (pendingStatus === "Cancelled" || pendingStatus === "Returned") {
+        try {
+          await Promise.all(
+            (updated.items || [])
+              .filter(it => it.productId)
+              .map(it => updateProductStock(it.productId, { add: +Number(it.qty || 1) }))
+          );
+        } catch (restockErr) {
+          console.warn("Stock restock warning:", restockErr);
+        }
+      }
+
+      // 4) Cleanup + notify
       const next = pendingStatus;
       const note = reasonText.trim();
       setReasonOpen(false);
       setPendingStatus("");
       setReasonText("");
       showAlert("success", `Order marked as ${next}`);
-      await sendOrderProgressEmail(updated)
+
+      // 5) Send status email
+      await sendOrderProgressEmail(updated);
+
     } catch (e) {
       showAlert("error", e.message || "Failed to update status");
     }
@@ -337,7 +352,7 @@ const move = async (next) => {
       await updateOrderEstimated(orderId, estimatedDelivery || "");
       const updated = await reload();
       showAlert("success", "Estimated delivery updated");
-     await sendOrderProgressEmail(updated)
+      await sendOrderProgressEmail(updated)
     } catch (e) {
       showAlert("error", e.message || "Failed to update estimated delivery");
     }
@@ -382,20 +397,20 @@ const move = async (next) => {
         <h3 className="font-semibold">Status</h3>
         <div className="flex flex-wrap gap-2">
           {canAdvance.next("Packed") && (
-    <Button onClick={() => move("Packed")}>Mark Packed</Button>
-  )}
-  {canAdvance.next("Waiting for Pickup") && (
-    <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
-  )}
-  {canAdvance.next("In Transit") && (
-    <Button onClick={() => move("In Transit")}>In Transit</Button>
-  )}
-  {canAdvance.next("Out for Delivery") && (
-    <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
-  )}
-  {canAdvance.next("Delivered") && (
-    <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
-  )}
+            <Button onClick={() => move("Packed")}>Mark Packed</Button>
+          )}
+          {canAdvance.next("Waiting for Pickup") && (
+            <Button onClick={() => move("Waiting for Pickup")}>Waiting for Pickup</Button>
+          )}
+          {canAdvance.next("In Transit") && (
+            <Button onClick={() => move("In Transit")}>In Transit</Button>
+          )}
+          {canAdvance.next("Out for Delivery") && (
+            <Button onClick={() => move("Out for Delivery")}>Out for Delivery</Button>
+          )}
+          {canAdvance.next("Delivered") && (
+            <Button onClick={() => move("Delivered")}>Mark Delivered</Button>
+          )}
           <button
             onClick={() => askReasonAndMove("Cancelled")}
             className="flex items-center gap-1 rounded-md border border-red-500 bg-red-100 px-3 py-1 text-sm font-semibold text-red-700 hover:bg-red-200"

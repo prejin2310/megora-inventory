@@ -4,6 +4,9 @@ import {
   listCustomers,
   createCustomer,
   createOrder,
+  updateProductStock, // atomic increment/decrement
+  // decrementProductStockGuarded, // Optional stricter server-side guard (if you add it in firestore.js)
+  // subscribeProducts, // Optional real-time products (if you enable it in firestore.js)
 } from "../../firebase/firestore"
 import { Dialog } from "@headlessui/react"
 import {
@@ -45,10 +48,10 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
   const [notes, setNotes] = useState("")
   const [shipAmount, setShipAmount] = useState("0")
 
-  // Discount state (amount and percentage are mutually exclusive; last edited wins)
+  // Discount state
   const [discAmount, setDiscAmount] = useState("0")
-  const [discPct, setDiscPct] = useState("") // e.g., "10" for 10%
-  const [lastEdited, setLastEdited] = useState("amount") // "amount" | "percent"
+  const [discPct, setDiscPct] = useState("")
+  const [lastEdited, setLastEdited] = useState("amount")
 
   // Payment
   const [payMode, setPayMode] = useState("COD")
@@ -77,6 +80,21 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
       }
     })()
   }, [open])
+
+  // Optional: live product updates while dialog is open
+  // Uncomment if subscribeProducts is exported from firestore.js
+  /*
+  useEffect(() => {
+    if (!open) return
+    let unsub
+    try {
+      unsub = subscribeProducts((items) => setProducts(items))
+    } catch (e) {
+      console.warn("subscribeProducts failed", e)
+    }
+    return () => unsub?.()
+  }, [open])
+  */
 
   // Reset on close
   useEffect(() => {
@@ -189,21 +207,20 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
       )
     )
 
-  // Derived totals
+  // Totals
   const subtotal = items.reduce(
     (s, it) => s + Number(it.price) * Number(it.qty),
     0
   )
   const shippingNum = Number(shipAmount || 0)
 
-  // Compute discount from lastEdited control
+  // Discount math
   const effectiveDiscAmount = useMemo(() => {
     const pct = Math.max(0, Math.min(100, Number(discPct || 0)))
     if (lastEdited === "percent") {
       const calc = (subtotal * pct) / 100
       return Math.min(calc, subtotal)
     }
-    // amount is last edited
     const amt = Math.max(0, Number(discAmount || 0))
     return Math.min(amt, subtotal)
   }, [discAmount, discPct, lastEdited, subtotal])
@@ -211,34 +228,29 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
   const discountNum = effectiveDiscAmount
   const grandTotal = subtotal + shippingNum - discountNum
 
-  // Discount handlers (mutual exclusivity)
+  // Discount handlers
   const onDiscAmountChange = (v) => {
     setLastEdited("amount")
     setDiscAmount(v)
-    // If amount entered, back-calc percentage
     const amt = Math.max(0, Number(v || 0))
     const pct = subtotal > 0 ? Math.min(100, (amt / subtotal) * 100) : 0
     setDiscPct(subtotal > 0 ? String(Math.round(pct * 100) / 100) : "")
   }
   const onDiscPctChange = (v) => {
     setLastEdited("percent")
-    // clamp 0..100
     const pct = Math.max(0, Math.min(100, Number(v || 0)))
     setDiscPct(String(pct))
-    // When percent edited, compute amount mirror
     const amt = (subtotal * pct) / 100
     setDiscAmount(String(Math.round(amt * 100) / 100))
   }
 
-  // Payment behavior: if COD, force Unpaid and disable txn
+  // Payment behavior: COD => enforce Unpaid and disable txn
   useEffect(() => {
     if (payMode === "COD") {
       if (payStatus !== "Unpaid") setPayStatus("Unpaid")
       if (payTxn) setPayTxn("")
     }
-  }, [payMode]) // eslint-disable-line
-
-  // Also adjust if user flips status while COD, keep unpaid
+  }, [payMode])
   useEffect(() => {
     if (payMode === "COD" && payStatus !== "Unpaid") {
       setPayStatus("Unpaid")
@@ -249,12 +261,9 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
   const emailValid =
     !newCustomer.email ||
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newCustomer.email.trim())
-  const phoneValid = !newCustomer.phone || /^\d{10}$/.test(newCustomer.phone.trim())
-  const canSubmit =
-    items.length > 0 &&
-    emailValid &&
-    phoneValid &&
-    !saving
+  const phoneValid =
+    !newCustomer.phone || /^\d{10}$/.test(newCustomer.phone.trim())
+  const canSubmit = items.length > 0 && emailValid && phoneValid && !saving
 
   const keepExisting = () => {
     if (!match) return
@@ -288,6 +297,7 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
 
   const save = async () => {
     setError("")
+    setFormHint("")
     if (!items.length) {
       setError("Add at least one item")
       return
@@ -299,6 +309,39 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
     if (!phoneValid) {
       setError("Phone must be 10 digits")
       return
+    }
+
+    // 0) Ensure every line has productId (prevents silent skip of stock update)
+    if (items.some((it) => !it.productId)) {
+      setError(
+        "Some items are not linked to products. Remove and re-add from the selector so each line has a productId."
+      )
+      return
+    }
+
+    // 1) Validate inventory before creating order (client-side check)
+    for (const it of items) {
+      const p = products.find((x) => x.id === it.productId)
+      const wanted = Number(it.qty || 0)
+      if (!p) {
+        setError(`Product not found for "${it?.name || it?.sku || "item"}"`)
+        return
+      }
+      if (!Number.isFinite(wanted) || wanted <= 0) {
+        setError(`Invalid quantity for "${p.name}"`)
+        return
+      }
+      const available = Number(p.stock ?? 0)
+      if (!Number.isFinite(available)) {
+        setError(`Inventory not configured for "${p.name}"`)
+        return
+      }
+      if (available < wanted) {
+        setError(
+          `Not enough stock for "${p.name}". Available: ${available}, requested: ${wanted}`
+        )
+        return
+      }
     }
 
     setSaving(true)
@@ -316,7 +359,10 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
           customerSnap = { ...hit }
         } else {
           const addressLine = (newCustomer.address || "").trim()
-          const ref = await createCustomer({ ...newCustomer, address: addressLine })
+          const ref = await createCustomer({
+            ...newCustomer,
+            address: addressLine,
+          })
           finalCustomerId = ref.id
           customerSnap = { ...newCustomer, address: addressLine }
         }
@@ -328,6 +374,7 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
         price: it.price,
         qty: it.qty,
         image: it.image || "",
+        productId: it.productId || null,
       }))
 
       const payload = {
@@ -338,7 +385,9 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
           subtotal,
           shipping: shippingNum,
           discount: discountNum,
-          ...(lastEdited === "percent" ? { discountPct: Number(discPct || 0) } : {}),
+          ...(lastEdited === "percent"
+            ? { discountPct: Number(discPct || 0) }
+            : {}),
           grandTotal,
         },
         channel,
@@ -347,9 +396,57 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
         shippingAddress: customerSnap?.address || newCustomer.address || "",
       }
 
+      // 2) Create order
       const { id } = await createOrder(payload)
+
+      // 3) Atomically decrement stock for each item; report failures clearly
+      let decrementFailures = []
+      try {
+        await Promise.all(
+          items
+            .filter((it) => it.productId)
+            .map(async (it) => {
+              try {
+                // Option A: atomic increment (current)
+                await updateProductStock(it.productId, {
+                  add: -Number(it.qty || 1),
+                })
+
+                // Option B: stricter guard (requires helper in firestore.js)
+                // await decrementProductStockGuarded(it.productId, Number(it.qty || 1))
+              } catch (e) {
+                decrementFailures.push({
+                  sku: it.sku,
+                  name: it.name,
+                  err: e?.message || String(e),
+                })
+              }
+            })
+        )
+      } catch (e) {
+        decrementFailures.push({
+          sku: "unknown",
+          name: "unknown",
+          err: e?.message || String(e),
+        })
+      }
+
+      if (decrementFailures.length > 0) {
+        console.warn("Stock decrement issues:", decrementFailures)
+        setFormHint(
+          `Order created, but some stock updates failed: ` +
+            decrementFailures
+              .map((f) => `${f.sku || ""} ${f.name || ""}`)
+              .join(", ") +
+            `. Please adjust inventory manually in Products.`
+        )
+      }
+
       onCreated?.({ id })
-      onClose?.()
+      // Only auto-close if stock decrements succeeded
+      if (decrementFailures.length === 0) {
+        onClose?.()
+      }
     } catch (e) {
       setError(e.message || "Failed to create order")
     } finally {
@@ -358,7 +455,12 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
   }
 
   return (
-    <Dialog open={open} onClose={onClose} initialFocus={closeButtonRef} className="relative z-50">
+    <Dialog
+      open={open}
+      onClose={onClose}
+      initialFocus={closeButtonRef}
+      className="relative z-50"
+    >
       <div className="fixed inset-0 bg-slate-900/60" aria-hidden="true" />
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-end sm:items-center justify-center p-2 sm:p-4">
@@ -419,71 +521,109 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                         </option>
                       ))}
                     </select>
-                    <span className="pointer-events-none absolute right-2 top-2.5 text-gray-500">▼</span>
+                    <span className="pointer-events-none absolute right-2 top-2.5 text-gray-500">
+                      ▼
+                    </span>
                   </div>
                 </div>
 
                 {/* New/Search fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="relative">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Name
+                    </label>
                     <div className="relative">
                       <UserIcon className="h-5 w-5 absolute left-2 top-2.5 text-gray-400" />
                       <input
                         className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
                         value={newCustomer.name}
-                        onChange={(e) => setNewCustomer((s) => ({ ...s, name: e.target.value }))}
+                        onChange={(e) =>
+                          setNewCustomer((s) => ({
+                            ...s,
+                            name: e.target.value,
+                          }))
+                        }
                         placeholder="Customer name"
                       />
                     </div>
                   </div>
                   <div className="relative">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Email</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Email
+                    </label>
                     <div className="relative">
                       <EnvelopeIcon className="h-5 w-5 absolute left-2 top-2.5 text-gray-400" />
                       <input
                         type="email"
                         className={`w-full rounded-lg border pl-9 pr-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200 ${
-                          newCustomer.email && !emailValid ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300"
+                          newCustomer.email && !emailValid
+                            ? "border-red-400 focus:border-red-400 focus:ring-red-200"
+                            : "border-gray-300"
                         }`}
                         value={newCustomer.email}
-                        onChange={(e) => setNewCustomer((s) => ({ ...s, email: e.target.value }))}
+                        onChange={(e) =>
+                          setNewCustomer((s) => ({
+                            ...s,
+                            email: e.target.value,
+                          }))
+                        }
                         placeholder="name@example.com"
                       />
                     </div>
                     {newCustomer.email && !emailValid && (
-                      <p className="mt-1 text-xs text-red-600">Invalid email format</p>
+                      <p className="mt-1 text-xs text-red-600">
+                        Invalid email format
+                      </p>
                     )}
                   </div>
                   <div className="relative">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Phone</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Phone
+                    </label>
                     <div className="relative">
                       <PhoneIcon className="h-5 w-5 absolute left-2 top-2.5 text-gray-400" />
                       <input
                         inputMode="numeric"
                         pattern="\d*"
                         className={`w-full rounded-lg border pl-9 pr-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200 ${
-                          newCustomer.phone && !phoneValid ? "border-red-400 focus:border-red-400 focus:ring-red-200" : "border-gray-300"
+                          newCustomer.phone && !phoneValid
+                            ? "border-red-400 focus:border-red-400 focus:ring-red-200"
+                            : "border-gray-300"
                         }`}
                         value={newCustomer.phone}
-                        onChange={(e) => setNewCustomer((s) => ({ ...s, phone: e.target.value }))}
+                        onChange={(e) =>
+                          setNewCustomer((s) => ({
+                            ...s,
+                            phone: e.target.value,
+                          }))
+                        }
                         placeholder="10-digit phone"
                         maxLength={10}
                       />
                     </div>
                     {newCustomer.phone && !phoneValid && (
-                      <p className="mt-1 text-xs text-red-600">Phone must be 10 digits</p>
+                      <p className="mt-1 text-xs text-red-600">
+                        Phone must be 10 digits
+                      </p>
                     )}
                   </div>
                   <div className="sm:col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">Address</label>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Address
+                    </label>
                     <div className="relative">
                       <MapPinIcon className="h-5 w-5 absolute left-2 top-2.5 text-gray-400" />
                       <textarea
                         rows={2}
                         className="w-full rounded-lg border border-gray-300 pl-9 pr-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200"
                         value={newCustomer.address}
-                        onChange={(e) => setNewCustomer((s) => ({ ...s, address: e.target.value }))}
+                        onChange={(e) =>
+                          setNewCustomer((s) => ({
+                            ...s,
+                            address: e.target.value,
+                          }))
+                        }
                         placeholder="Full address"
                       />
                     </div>
@@ -699,11 +839,8 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                     />
                   </div>
 
-                  {/* Discount percent */}
                   <div>
-                    <label className="text-xs text-gray-600">
-                      Discount Percentage (%)
-                    </label>
+                    <label className="text-xs text-gray-600">Discount Percentage (%)</label>
                     <input
                       className={`w-full rounded-lg border px-3 py-2 text-sm focus:border-sky-400 focus:ring focus:ring-sky-200 ${
                         lastEdited === "percent" ? "border-sky-400" : "border-gray-300"
@@ -718,7 +855,6 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                     />
                   </div>
 
-                  {/* Discount amount */}
                   <div className="sm:col-span-2">
                     <label className="text-xs text-gray-600">Discount Amount</label>
                     <input
@@ -738,21 +874,13 @@ export default function OrderForm({ open = true, onClose, onCreated }) {
                   </div>
                 </div>
 
-                <div className="mt-1 text-sm text-gray-600">
-                  Subtotal: ₹{subtotal.toFixed(2)}
-                </div>
-                <div className="text-sm text-gray-600">
-                  Shipping: ₹{shippingNum.toFixed(2)}
-                </div>
+                <div className="mt-1 text-sm text-gray-600">Subtotal: ₹{subtotal.toFixed(2)}</div>
+                <div className="text-sm text-gray-600">Shipping: ₹{shippingNum.toFixed(2)}</div>
                 <div className="text-sm text-gray-600">
                   Discount: ₹{discountNum.toFixed(2)}
-                  {lastEdited === "percent" && discPct
-                    ? ` (${Number(discPct).toFixed(2)}%)`
-                    : ""}
+                  {lastEdited === "percent" && discPct ? ` (${Number(discPct).toFixed(2)}%)` : ""}
                 </div>
-                <div className="mt-1 font-semibold">
-                  Grand Total: ₹{grandTotal.toFixed(2)}
-                </div>
+                <div className="mt-1 font-semibold">Grand Total: ₹{grandTotal.toFixed(2)}</div>
               </section>
             </div>
 
