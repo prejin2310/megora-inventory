@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Button from "../ui/Button";
+import { getProductBySku } from "../../firebase/firestore";
 
 const SKU_PREFIX = "MJ-0";
 
@@ -23,6 +24,27 @@ export default function AddProductModal({
   const [saving, setSaving] = useState(false);
 
   const skuRef = useRef(null);
+
+  useEffect(() => {
+  let active = true;
+  async function checkSku() {
+    if (sku.trim().length > SKU_PREFIX.length) {
+      const existing = await getProductBySku(sku.trim());
+      if (active) {
+        if (existing) {
+          setError(`⚠️ SKU ${sku} already exists!`);
+        } else {
+          setError("");
+        }
+      }
+    }
+  }
+  checkSku();
+  return () => {
+    active = false;
+  };
+}, [sku]);
+
 
   useEffect(() => {
     if (!open) {
@@ -80,43 +102,53 @@ export default function AddProductModal({
     };
   }, [image]);
 
-  const canSave = useMemo(() => {
-    const n = name.trim().length > 0;
-    const s = sku.trim().length >= SKU_PREFIX.length;
-    const p = !Number.isNaN(Number(price)) && Number(price) >= 0;
-    const st = !Number.isNaN(Number(stock)) && Number(stock) >= 0;
-    const ms = !Number.isNaN(Number(minStock)) && Number(minStock) >= 0;
-    return n && s && p && st && ms && !saving;
-  }, [name, sku, price, stock, minStock, saving]);
+const canSave = useMemo(() => {
+  const n = name.trim().length > 0;
+  const s = sku.trim().length >= SKU_PREFIX.length;
+  const p = !Number.isNaN(Number(price)) && Number(price) >= 0;
+  const st = !Number.isNaN(Number(stock)) && Number(stock) >= 0;
+  const ms = !Number.isNaN(Number(minStock)) && Number(minStock) >= 0;
+  return n && s && p && st && ms && !saving && !error; // ✅ block on duplicate SKU
+}, [name, sku, price, stock, minStock, saving, error]);
 
-  const submit = async (e) => {
-    e?.preventDefault?.();
-    setError("");
-    if (!canSave) return;
-    setSaving(true);
-    try {
-      const payload = {
-        name: name.trim(),
-        sku: sku.trim(),
-        price: Number(price),
-        stock: Number(stock),
-        minStock: Number(minStock),
-        image: image.trim(),
-        category: category.trim(),
-        description: description.trim(),
-        createdAt: new Date().toISOString(),
-      };
-      const created = await createProduct(payload);
-      onCreated?.(created);
-      onClose?.();
-    } catch (e2) {
-      console.error("Create product error:", e2);
-      setError(e2.message || "Failed to create product");
-    } finally {
+
+const submit = async (e) => {
+  e?.preventDefault?.();
+  setError("");
+  if (!canSave) return;
+
+  setSaving(true);
+  try {
+    // 🔍 check if SKU already exists in Firebase
+    const existing = await getProductBySku(sku.trim());
+    if (existing) {
+      setError(`Product with SKU ${sku} already exists!`);
       setSaving(false);
+      return;
     }
-  };
 
+    const payload = {
+      name: name.trim(),
+      sku: sku.trim(),
+      price: Number(price),
+      stock: Number(stock),
+      minStock: Number(minStock),
+      image: image.trim(),
+      category: category.trim(),
+      description: description.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const created = await createProduct(payload);
+    onCreated?.(created);
+    onClose?.();
+  } catch (e2) {
+    console.error("Create product error:", e2);
+    setError(e2.message || "Failed to create product");
+  } finally {
+    setSaving(false);
+  }
+};
   if (!open) return null;
 
   return (
