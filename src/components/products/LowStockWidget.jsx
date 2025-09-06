@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { listProducts, updateProductStock } from '../../firebase/firestore'
+import { doc, updateDoc } from "firebase/firestore" 
 import Button from '../ui/Button'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import { db } from "../../firebase/firebase" 
 
 const DEFAULT_MIN_STOCK = 4
 
@@ -69,21 +71,30 @@ export default function LowStockWidget() {
     setEditValues({})
   }
 
-  const saveEdit = async (p) => {
-    const { stock, minStock } = editValues[p.id]
-    if (stock < 0 || minStock < 0) return alert('Values cannot be negative')
-    setRestocking(s => ({ ...s, [p.id]: true }))
-    try {
-      await updateProductStock(p.id, { setTo: Number(stock), minStock: Number(minStock) })
-      await refresh()
-      cancelEdit()
-    } catch (e) {
-      console.error('Update error:', e)
-      alert(e.message || 'Failed to update stock')
-    } finally {
-      setRestocking(s => ({ ...s, [p.id]: false }))
-    }
+ const saveEdit = async (p) => {
+  const { stock, minStock } = editValues[p.id]
+  if (stock < 0 || minStock < 0) return alert('Values cannot be negative')
+
+  setRestocking(s => ({ ...s, [p.id]: true }))
+  try {
+    // ✅ compute delta
+    const delta = Number(stock) - Number(p.stock ?? 0)
+    await updateProductStock(p.id, { add: delta })
+
+    // update minStock separately
+    const ref = doc(db, "products", p.id)
+    await updateDoc(ref, { minStock: Number(minStock) })
+
+    await refresh()
+    cancelEdit()
+  } catch (e) {
+    console.error('Update error:', e)
+    alert(e.message || 'Failed to update stock')
+  } finally {
+    setRestocking(s => ({ ...s, [p.id]: false }))
   }
+}
+
 
   const stockClass = (stock, min) => {
     if (stock <= 1) return 'bg-red-100 text-red-700 font-semibold px-2 py-1 rounded'
