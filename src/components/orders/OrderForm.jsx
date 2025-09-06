@@ -4,6 +4,7 @@ import {
   listCustomers,
   createCustomer,
   createOrder,
+  updateCustomer,
 } from "../../firebase/firestore"
 import Button from "../ui/Button"
 
@@ -17,6 +18,11 @@ export default function OrderForm({ onClose, onCreated }) {
     phone: "",
     address: "",
   })
+
+  const [duplicateCustomer, setDuplicateCustomer] = useState(null) // ✅ store if found duplicate
+  const [showDuplicatePrompt, setShowDuplicatePrompt] = useState(false) // ✅ show modal
+
+
   const [search, setSearch] = useState("")
   const [selectedProductId, setSelectedProductId] = useState("")
   const [qty, setQty] = useState("1")
@@ -43,6 +49,37 @@ export default function OrderForm({ onClose, onCreated }) {
       }
     })()
   }, [])
+
+  // ✅ Check for duplicate on blur
+  const checkDuplicateCustomer = () => {
+    if (!newCustomer.phone && !newCustomer.email) return
+    const match = customers.find(
+      (c) =>
+        (newCustomer.phone && c.phone === newCustomer.phone) ||
+        (newCustomer.email && c.email === newCustomer.email)
+    )
+    if (match) {
+      setDuplicateCustomer(match)
+      setShowDuplicatePrompt(true)
+    }
+  }
+
+  const handleDuplicateChoice = async (choice) => {
+    setShowDuplicatePrompt(false)
+    if (choice === "useExisting") {
+      setCustomerId(duplicateCustomer.id) // ✅ link order to existing
+      setNewCustomer({ name: "", email: "", phone: "", address: "" }) // clear new
+    } else if (choice === "updateExisting") {
+      await updateCustomer(duplicateCustomer.id, { ...duplicateCustomer, ...newCustomer })
+      setCustomerId(duplicateCustomer.id)
+    } else if (choice === "newSeparate") {
+      // ✅ allow new customer creation separately
+      setCustomerId("") 
+    } else if (choice === "block") {
+      setError("Order creation blocked due to duplicate customer")
+    }
+    setDuplicateCustomer(null)
+  }
 
   const filteredProducts = useMemo(() => {
     const q = (search || "").trim().toLowerCase()
