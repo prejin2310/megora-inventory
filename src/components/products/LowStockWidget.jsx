@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { listProducts, updateProductStock } from '../../firebase/firestore'
-import { doc, updateDoc } from "firebase/firestore" 
+import { doc, updateDoc } from "firebase/firestore"
 import Button from '../ui/Button'
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
-import { db } from "../../firebase/firebase" 
+import { db } from "../../firebase/firebase"
 
 const DEFAULT_MIN_STOCK = 4
+const PAGE_SIZE = 10
 
 export default function LowStockWidget() {
   const [products, setProducts] = useState([])
@@ -15,8 +16,9 @@ export default function LowStockWidget() {
   const [tab, setTab] = useState('LOW')
   const [restocking, setRestocking] = useState({})
   const [showCriticalModal, setShowCriticalModal] = useState(false)
-  const [editing, setEditing] = useState({}) // Track which row is being edited
-  const [editValues, setEditValues] = useState({}) // Track input values
+  const [editing, setEditing] = useState({})
+  const [editValues, setEditValues] = useState({})
+  const [page, setPage] = useState(1)
 
   const refresh = async () => {
     setError('')
@@ -34,22 +36,25 @@ export default function LowStockWidget() {
 
   useEffect(() => { refresh() }, [])
 
+  // Low stock: stock > 1 and <= minStock
   const lowList = useMemo(() => {
     return products
       .filter(p => {
         const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
         const stock = Number(p.stock ?? 0)
-        return stock > 0 && stock <= min
+        return stock > 1 && stock <= min
       })
       .sort((a, b) => Number(a.stock ?? 0) - Number(b.stock ?? 0))
   }, [products])
 
+  // Out of stock: stock = 0
   const outList = useMemo(() => {
     return products
-      .filter(p => Number(p.stock ?? 0) <= 0)
+      .filter(p => Number(p.stock ?? 0) === 0)
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
   }, [products])
 
+  // Critical: stock <= 1
   const criticalList = useMemo(() => {
     return products.filter(p => Number(p.stock ?? 0) <= 1)
   }, [products])
@@ -61,6 +66,13 @@ export default function LowStockWidget() {
   const rows = tab === 'LOW' ? lowList : outList
   const title = tab === 'LOW' ? 'Low Stock' : 'Out of Stock'
 
+  // Pagination
+  const totalPages = Math.ceil(rows.length / PAGE_SIZE)
+  const paginatedRows = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE
+    return rows.slice(start, start + PAGE_SIZE)
+  }, [rows, page])
+
   const startEdit = (p) => {
     setEditing({ [p.id]: true })
     setEditValues({ [p.id]: { stock: p.stock ?? 0, minStock: p.minStock ?? DEFAULT_MIN_STOCK } })
@@ -71,30 +83,27 @@ export default function LowStockWidget() {
     setEditValues({})
   }
 
- const saveEdit = async (p) => {
-  const { stock, minStock } = editValues[p.id]
-  if (stock < 0 || minStock < 0) return alert('Values cannot be negative')
+  const saveEdit = async (p) => {
+    const { stock, minStock } = editValues[p.id]
+    if (stock < 0 || minStock < 0) return alert('Values cannot be negative')
 
-  setRestocking(s => ({ ...s, [p.id]: true }))
-  try {
-    // ✅ compute delta
-    const delta = Number(stock) - Number(p.stock ?? 0)
-    await updateProductStock(p.id, { add: delta })
+    setRestocking(s => ({ ...s, [p.id]: true }))
+    try {
+      const delta = Number(stock) - Number(p.stock ?? 0)
+      await updateProductStock(p.id, { add: delta })
 
-    // update minStock separately
-    const ref = doc(db, "products", p.id)
-    await updateDoc(ref, { minStock: Number(minStock) })
+      const ref = doc(db, "products", p.id)
+      await updateDoc(ref, { minStock: Number(minStock) })
 
-    await refresh()
-    cancelEdit()
-  } catch (e) {
-    console.error('Update error:', e)
-    alert(e.message || 'Failed to update stock')
-  } finally {
-    setRestocking(s => ({ ...s, [p.id]: false }))
+      await refresh()
+      cancelEdit()
+    } catch (e) {
+      console.error('Update error:', e)
+      alert(e.message || 'Failed to update stock')
+    } finally {
+      setRestocking(s => ({ ...s, [p.id]: false }))
+    }
   }
-}
-
 
   const stockClass = (stock, min) => {
     if (stock <= 1) return 'bg-red-100 text-red-700 font-semibold px-2 py-1 rounded'
@@ -102,67 +111,62 @@ export default function LowStockWidget() {
     return 'bg-green-100 text-green-700 font-semibold px-2 py-1 rounded'
   }
 
-  // Utility to convert image URL to base64
-const getBase64FromUrl = async (url) => {
-  const res = await fetch(url)
-  const blob = await res.blob()
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
-
-const exportPDF = async () => {
-  try {
-    const doc = new jsPDF()
-    const now = new Date()
-    const dateStr = now.toLocaleString()
-    const logoUrl = 'https://i.ibb.co/hRzSG3r0/webGold.png'
-    const logoBase64 = await getBase64FromUrl(logoUrl)
-    const pageWidth = doc.internal.pageSize.getWidth()
-
-    // Header
-    if (logoBase64) {
-      doc.addImage(logoBase64, 'PNG', 15, 10, 30, 15) // x, y, width, height
-    }
-    doc.setFontSize(16)
-    doc.setFont('helvetica', 'bold')
-    doc.text("Megora Jewels", pageWidth / 2, 15, { align: 'center' })
-    doc.setFontSize(10)
-    doc.setFont('helvetica', 'normal')
-    doc.text(`Report: ${title}`, pageWidth / 2, 22, { align: 'center' })
-    doc.text(`Date: ${dateStr}`, pageWidth - 15, 22, { align: 'right' })
-
-    // Table
-    const tableColumn = ["SKU", "Name", "Stock", "Min Stock"]
-    const tableRows = rows.map(p => [
-      p.sku || '-',
-      p.name || '-',
-      p.stock ?? 0,
-      p.minStock ?? DEFAULT_MIN_STOCK
-    ])
-
-    autoTable(doc, {
-      head: [tableColumn],
-      body: tableRows,
-      startY: 30,
-      theme: 'grid',
-      headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0] },
-      styles: { fontSize: 9 },
+  const getBase64FromUrl = async (url) => {
+    const res = await fetch(url)
+    const blob = await res.blob()
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
     })
-
-    doc.save(`${title.replace(/\s+/g, '_')}_${now.getTime()}.pdf`)
-  } catch (e) {
-    console.error('PDF export failed', e)
-    alert('Failed to export PDF')
   }
-}
 
+  const exportPDF = async () => {
+    try {
+      const pdf = new jsPDF()
+      const now = new Date()
+      const dateStr = now.toLocaleString()
+      const logoUrl = 'https://i.ibb.co/hRzSG3r0/webGold.png'
+      const logoBase64 = await getBase64FromUrl(logoUrl)
+      const pageWidth = pdf.internal.pageSize.getWidth()
 
+      // Header
+      if (logoBase64) {
+        pdf.addImage(logoBase64, 'PNG', 15, 10, 30, 15)
+      }
+      pdf.setFontSize(16)
+      pdf.setFont('helvetica', 'bold')
+      pdf.text("Megora Jewels", pageWidth / 2, 15, { align: 'center' })
+      pdf.setFontSize(10)
+      pdf.setFont('helvetica', 'normal')
+      pdf.text(`Report: ${title}`, pageWidth / 2, 22, { align: 'center' })
+      pdf.text(`Date: ${dateStr}`, pageWidth - 15, 22, { align: 'right' })
 
+      // Table
+      const tableColumn = ["SKU", "Name", "Stock", "Min Stock"]
+      const tableRows = rows.map(p => [
+        p.sku || '-',
+        p.name || '-',
+        p.stock ?? 0,
+        p.minStock ?? DEFAULT_MIN_STOCK
+      ])
 
+      autoTable(pdf, {
+        head: [tableColumn],
+        body: tableRows,
+        startY: 30,
+        theme: 'grid',
+        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0] },
+        styles: { fontSize: 9 },
+      })
+
+      pdf.save(`${title.replace(/\s+/g, '_')}_${now.getTime()}.pdf`)
+    } catch (e) {
+      console.error('PDF export failed', e)
+      alert('Failed to export PDF')
+    }
+  }
 
   return (
     <div className="bg-white border rounded-xl shadow-sm p-4 flex flex-col gap-4">
@@ -173,13 +177,13 @@ const exportPDF = async () => {
         <div className="inline-flex bg-gray-100 rounded-full p-1 text-sm">
           <button
             className={`px-3 py-1 rounded-full ${tab === 'LOW' ? 'bg-white shadow font-semibold' : 'text-gray-600'}`}
-            onClick={() => setTab('LOW')}
+            onClick={() => { setTab('LOW'); setPage(1) }}
           >
             Low Stock
           </button>
           <button
             className={`px-3 py-1 rounded-full ${tab === 'OUT' ? 'bg-white shadow font-semibold' : 'text-gray-600'}`}
-            onClick={() => setTab('OUT')}
+            onClick={() => { setTab('OUT'); setPage(1) }}
           >
             Out of Stock
           </button>
@@ -194,67 +198,77 @@ const exportPDF = async () => {
       ) : rows.length === 0 ? (
         <div className="text-gray-500 text-sm">No products in this list.</div>
       ) : (
-       <div className="overflow-x-auto">
-  <table className="min-w-full text-sm text-gray-700">
-    <thead className="bg-gray-50">
-      <tr>
-        <th className="px-4 py-2 text-left font-semibold">SKU</th>
-        <th className="px-4 py-2 text-left font-semibold">Name</th>
-        <th className="px-4 py-2 text-left font-semibold">Stock</th>
-        <th className="px-4 py-2 text-left font-semibold">Min Stock</th>
-        <th className="px-4 py-2"></th>
-      </tr>
-    </thead>
-    <tbody className="bg-white divide-y divide-gray-100">
-      {rows.map(p => {
-        const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
-        const stock = Number(p.stock ?? 0)
-        const isEditing = editing[p.id]
-        return (
-          <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
-            <td className="px-4 py-2 font-mono">{p.sku || '-'}</td>
-            <td className="px-4 py-2 truncate">{p.name || '-'}</td>
-            <td className="px-4 py-2">
-              {isEditing ? (
-                <input
-                  type="number"
-                  className="border px-2 py-1 rounded w-20"
-                  value={editValues[p.id].stock}
-                  onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], stock: e.target.value } }))}
-                />
-              ) : (
-                <span className={stockClass(stock, min)}>{stock}</span>
-              )}
-            </td>
-            <td className="px-4 py-2">
-              {isEditing ? (
-                <input
-                  type="number"
-                  className="border px-2 py-1 rounded w-20"
-                  value={editValues[p.id].minStock}
-                  onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], minStock: e.target.value } }))}
-                />
-              ) : (
-                <span className="text-gray-500">{min}</span>
-              )}
-            </td>
-            <td className="px-4 py-2 text-right space-x-1">
-              {isEditing ? (
-                <>
-                  <Button size="sm" onClick={() => saveEdit(p)}>Save</Button>
-                  <Button size="sm" onClick={cancelEdit} className="bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</Button>
-                </>
-              ) : (
-                <Button size="sm" onClick={() => startEdit(p)}>Edit</Button>
-              )}
-            </td>
-          </tr>
-        )
-      })}
-    </tbody>
-  </table>
-</div>
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-sm text-gray-700">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left font-semibold">SKU</th>
+                <th className="px-4 py-2 text-left font-semibold">Name</th>
+                <th className="px-4 py-2 text-left font-semibold">Stock</th>
+                <th className="px-4 py-2 text-left font-semibold">Min Stock</th>
+                <th className="px-4 py-2"></th>
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-100">
+              {paginatedRows.map(p => {
+                const min = Number(p.minStock ?? DEFAULT_MIN_STOCK)
+                const stock = Number(p.stock ?? 0)
+                const isEditing = editing[p.id]
+                return (
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors duration-150">
+                    <td className="px-4 py-2 font-mono">{p.sku || '-'}</td>
+                    <td className="px-4 py-2 truncate">{p.name || '-'}</td>
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          className="border px-2 py-1 rounded w-20"
+                          value={editValues[p.id].stock}
+                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], stock: e.target.value } }))}
+                        />
+                      ) : (
+                        <span className={stockClass(stock, min)}>{stock}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2">
+                      {isEditing ? (
+                        <input
+                          type="number"
+                          className="border px-2 py-1 rounded w-20"
+                          value={editValues[p.id].minStock}
+                          onChange={e => setEditValues(s => ({ ...s, [p.id]: { ...s[p.id], minStock: e.target.value } }))}
+                        />
+                      ) : (
+                        <span className="text-gray-500">{min}</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right space-x-1">
+                      {isEditing ? (
+                        <>
+                          <Button size="sm" onClick={() => saveEdit(p)}>Save</Button>
+                          <Button size="sm" onClick={cancelEdit} className="bg-gray-200 text-gray-700 hover:bg-gray-300">Cancel</Button>
+                        </>
+                      ) : (
+                        <Button size="sm" onClick={() => startEdit(p)}>Edit</Button>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <div className="flex justify-center items-center gap-2 mt-3">
+          <Button size="sm" disabled={page === 1} onClick={() => setPage(page - 1)}>Prev</Button>
+          <span className="text-sm text-gray-600">
+            Page {page} of {totalPages}
+          </span>
+          <Button size="sm" disabled={page === totalPages} onClick={() => setPage(page + 1)}>Next</Button>
+        </div>
       )}
 
       {/* Critical Modal */}
